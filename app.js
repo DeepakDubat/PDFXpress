@@ -1,0 +1,859 @@
+/* ===== PDFXpress - Main Application ===== */
+
+// State
+const state = {
+  mergeFiles: [],
+  splitFile: null, splitPages: 0,
+  convertFile: null, convertPages: 0,
+  protectFile: null,
+  formFile: null, formAnnotations: [], annotTool: 'text',
+  formPdfBytes: null
+};
+
+// ===== PREVIEW MODAL =====
+function createPreviewModal() {
+  if (document.getElementById('preview-modal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'preview-modal';
+  modal.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+    padding:1rem;overflow-y:auto;backdrop-filter:blur(8px);`;
+  modal.innerHTML = `
+    <div style="width:100%;max-width:900px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;
+        padding:0.8rem 0;margin-bottom:1rem;border-bottom:1px solid rgba(255,255,255,0.1);">
+        <span id="preview-title" style="font-weight:700;font-size:1.1rem;color:#e8eaf6;"></span>
+        <button onclick="closePreview()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
+          color:#e8eaf6;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.9rem;
+          font-weight:600;transition:all 0.2s;">✕ Close</button>
+      </div>
+      <div id="preview-body"></div>
+    </div>`;
+  modal.addEventListener('click', e => { if(e.target===modal) closePreview(); });
+  document.body.appendChild(modal);
+}
+
+function closePreview() {
+  const m = document.getElementById('preview-modal');
+  if (m) m.remove();
+}
+
+async function showPDFPreview(bytes, title) {
+  createPreviewModal();
+  document.getElementById('preview-title').textContent = '👁 Preview: ' + title;
+  const body = document.getElementById('preview-body');
+  body.innerHTML = '<div style="color:#8890b0;text-align:center;padding:2rem;">Rendering PDF...</div>';
+  try {
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    body.innerHTML = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale: 1.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      canvas.style.cssText = 'width:100%;border-radius:8px;margin-bottom:0.8rem;display:block;box-shadow:0 4px 20px rgba(0,0,0,0.5);';
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      const label = document.createElement('div');
+      label.style.cssText = 'color:#8890b0;font-size:0.78rem;margin-bottom:1.2rem;text-align:center;';
+      label.textContent = `Page ${i} of ${pdf.numPages}`;
+      body.appendChild(canvas);
+      body.appendChild(label);
+    }
+  } catch(e) {
+    body.innerHTML = `<div style="color:#ff6b6b;padding:1rem;">Error rendering PDF: ${e.message}</div>`;
+  }
+}
+
+function showImagePreview(dataUrl, title) {
+  createPreviewModal();
+  document.getElementById('preview-title').textContent = '👁 ' + title;
+  const body = document.getElementById('preview-body');
+  body.innerHTML = `<img src="${dataUrl}" style="width:100%;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.6);" />`;
+}
+
+// ===== NAVIGATION =====
+function openTool(name) {
+  document.getElementById('tool-panels').classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelector('.tools-section').style.display = 'none';
+  document.querySelector('.how-section').style.display = 'none';
+  document.querySelector('.features-section').style.display = 'none';
+  document.querySelector('.hero').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function closeTool() {
+  document.getElementById('tool-panels').classList.remove('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector('.tools-section').style.display = '';
+  document.querySelector('.how-section').style.display = '';
+  document.querySelector('.features-section').style.display = '';
+  document.querySelector('.hero').style.display = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ===== TOAST =====
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+// ===== DRAG & DROP =====
+function dragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function dropFiles(e, tool) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  const files = [...e.dataTransfer.files];
+  if (tool === 'merge') addFiles('merge', files);
+  else if (tool === 'split') loadSplitPDF(files[0]);
+  else if (tool === 'convert') loadConvertPDF(files[0]);
+  else if (tool === 'protect') loadProtectPDF(files[0]);
+  else if (tool === 'formfill') loadFormPDF(files[0]);
+  else if (tool === 'unlock') loadCrackPDF(files[0]);
+}
+
+// ===== HELPERS =====
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+function setProgress(tool, pct, label) {
+  const pw = document.getElementById(tool + '-progress');
+  pw.style.display = 'block';
+  document.getElementById(tool + '-fill').style.width = pct + '%';
+  if (label) document.getElementById(tool + '-label').textContent = label;
+}
+function hideProgress(tool) { document.getElementById(tool + '-progress').style.display = 'none'; }
+function downloadBytes(bytes, filename) {
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const blob = new Blob([arr], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+}
+
+function makeResultItem(icon, label, onDownload, onPreview, extraInfo = '') {
+  const div = document.createElement('div'); div.className = 'result-item';
+  div.style.cssText = 'display:flex; align-items:center; gap:12px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:10px; padding:10px 16px; margin-top:0.8rem;';
+  div.innerHTML = `<span class="ri-icon" style="font-size:1.2rem;">${icon}</span>
+    <div style="display:flex; flex-direction:column; flex:1; min-width:0;">
+      <input type="text" class="ri-name-input" value="${label}" style="background:transparent; border:none; border-bottom:1px dashed rgba(255,255,255,0.3); color:#fff; font-family:inherit; font-size:0.92rem; padding:2px 4px; outline:none; width:100%; box-sizing:border-box;" />
+      ${extraInfo ? `<span style="font-size:0.75rem; color:var(--text-muted); margin-top:2px; padding-left:4px;">${extraInfo}</span>` : ''}
+    </div>
+    <button class="btn-preview" style="background:rgba(124,92,252,0.15); border:1px solid rgba(124,92,252,0.3); color:#a78bfa; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:0.85rem; font-weight:600; transition:all 0.2s;">👁 Preview</button>
+    <button class="btn-download" style="background:rgba(0,212,255,0.15); border:1px solid rgba(0,212,255,0.3); color:#00d4ff; padding:6px 12px; border-radius:8px; cursor:pointer; font-size:0.85rem; font-weight:600; transition:all 0.2s; display:flex; align-items:center; gap:4px;">⬇ Download</button>`;
+  
+  const input = div.querySelector('.ri-name-input');
+  div.querySelector('.btn-preview').onclick = onPreview;
+  div.querySelector('.btn-download').onclick = () => {
+    let name = input.value.trim();
+    if (!name) name = label;
+    if (!name.toLowerCase().endsWith('.pdf')) {
+      name += '.pdf';
+    }
+    onDownload(name);
+  };
+  return div;
+}
+
+// ===== MERGE =====
+function addFiles(tool, filesInput) {
+  const files = filesInput instanceof FileList ? [...filesInput] : filesInput;
+  files.forEach(f => {
+    if (!f.name.endsWith('.pdf')) { showToast('Only PDF files allowed', 'error'); return; }
+    state.mergeFiles.push(f);
+  });
+  renderMergeList();
+}
+function renderMergeList() {
+  const list = document.getElementById('merge-list');
+  list.innerHTML = '';
+  state.mergeFiles.forEach((f, i) => {
+    const div = document.createElement('div'); div.className = 'file-item';
+    div.innerHTML = `<span class="fi-icon">📄</span>
+      <span class="fi-name">${f.name}</span>
+      <span class="fi-size">${fmtSize(f.size)}</span>
+      <button class="fi-remove" onclick="removeMergeFile(${i})">✕</button>`;
+    list.appendChild(div);
+  });
+  document.getElementById('merge-btn').disabled = state.mergeFiles.length < 2;
+}
+function removeMergeFile(i) { state.mergeFiles.splice(i,1); renderMergeList(); }
+
+async function mergePDFs() {
+  if (state.mergeFiles.length < 2) return;
+  setProgress('merge', 10, 'Loading PDFs...');
+  try {
+    const { PDFDocument } = PDFLib;
+    const merged = await PDFDocument.create();
+    for (let i = 0; i < state.mergeFiles.length; i++) {
+      const pct = 10 + Math.floor((i / state.mergeFiles.length) * 70);
+      setProgress('merge', pct, `Processing ${i+1}/${state.mergeFiles.length}...`);
+      const ab = await state.mergeFiles[i].arrayBuffer();
+      const doc = await PDFDocument.load(ab);
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    setProgress('merge', 90, 'Finalizing...');
+    const bytes = await merged.save();
+    setProgress('merge', 100, 'Done!');
+    const result = document.getElementById('merge-result');
+    result.innerHTML = '';
+    const item = makeResultItem('✅', 'merged_document.pdf',
+      (newName) => downloadBytes(bytes, newName),
+      () => showPDFPreview(bytes, 'merged_document.pdf'),
+      `${state.mergeFiles.length} files combined`
+    );
+    result.appendChild(item);
+    showToast('PDFs merged successfully!', 'success');
+    setTimeout(() => hideProgress('merge'), 1000);
+  } catch(e) {
+    showToast('Error merging PDFs: ' + e.message, 'error');
+    hideProgress('merge');
+  }
+}
+
+// ===== SPLIT =====
+async function loadSplitPDF(file) {
+  if (!file || !file.name.endsWith('.pdf')) { showToast('Please select a PDF file', 'error'); return; }
+  state.splitFile = file;
+  try {
+    const ab = await file.arrayBuffer();
+    const { PDFDocument } = PDFLib;
+    const doc = await PDFDocument.load(ab);
+    state.splitPages = doc.getPageCount();
+    document.getElementById('split-options').style.display = 'block';
+    document.getElementById('split-info').textContent = `📄 ${file.name} — ${state.splitPages} pages — ${fmtSize(file.size)}`;
+    document.getElementById('split-btn').disabled = false;
+    document.getElementById('split-to').max = state.splitPages;
+    document.getElementById('split-from').max = state.splitPages;
+    document.querySelectorAll('input[name="split-mode"]').forEach(r => {
+      r.addEventListener('change', () => {
+        document.getElementById('split-range-inputs').style.display = r.value === 'range' ? 'flex' : 'none';
+      });
+    });
+    showToast(`Loaded: ${file.name}`, 'success');
+  } catch(e) { showToast('Could not read PDF: ' + e.message, 'error'); }
+}
+
+async function splitPDF() {
+  if (!state.splitFile) return;
+  const mode = document.querySelector('input[name="split-mode"]:checked').value;
+  setProgress('split', 10, 'Loading PDF...');
+  try {
+    const ab = await state.splitFile.arrayBuffer();
+    const { PDFDocument } = PDFLib;
+    const src = await PDFDocument.load(ab);
+    const result = document.getElementById('split-result'); result.innerHTML = '';
+    if (mode === 'all') {
+      const dlls = [];
+      for (let i = 0; i < state.splitPages; i++) {
+        setProgress('split', 10 + Math.floor((i/state.splitPages)*85), `Extracting page ${i+1}/${state.splitPages}...`);
+        const newDoc = await PDFDocument.create();
+        const [page] = await newDoc.copyPages(src, [i]);
+        newDoc.addPage(page);
+        const bytes = await newDoc.save();
+        const idx = i;
+        dlls.push({ bytes, name: `page_${idx+1}.pdf` });
+        const item = makeResultItem('📄', `page_${idx+1}.pdf`,
+          (newName) => {
+            dlls[idx].name = newName;
+            downloadBytes(dlls[idx].bytes, newName);
+          },
+          () => showPDFPreview(dlls[idx].bytes, dlls[idx].name)
+        );
+        result.appendChild(item);
+      }
+      const allBtn = document.createElement('button');
+      allBtn.className = 'btn-download-all';
+      allBtn.textContent = '⬇ Download All as ZIP';
+      result.appendChild(allBtn);
+      allBtn.onclick = () => downloadAllZip(dlls);
+    } else {
+      let from = parseInt(document.getElementById('split-from').value) || 1;
+      let to = parseInt(document.getElementById('split-to').value) || state.splitPages;
+      from = Math.max(1, Math.min(from, state.splitPages));
+      to = Math.max(from, Math.min(to, state.splitPages));
+      const newDoc = await PDFDocument.create();
+      const indices = Array.from({length: to-from+1}, (_,i) => from-1+i);
+      const pages = await newDoc.copyPages(src, indices);
+      pages.forEach(p => newDoc.addPage(p));
+      const bytes = await newDoc.save();
+      setProgress('split', 95, 'Finalizing...');
+      const fname = `pages_${from}_to_${to}.pdf`;
+      const item = makeResultItem('✅', fname,
+        (newName) => downloadBytes(bytes, newName),
+        () => showPDFPreview(bytes, fname)
+      );
+      result.appendChild(item);
+    }
+    setProgress('split', 100, 'Done!');
+    showToast('PDF split successfully!', 'success');
+    setTimeout(() => hideProgress('split'), 1000);
+  } catch(e) { showToast('Error: ' + e.message, 'error'); hideProgress('split'); }
+}
+
+async function downloadAllZip(files) {
+  showToast('Creating ZIP...', 'info');
+  const zip = new JSZip();
+  const inputs = document.querySelectorAll('#split-result .ri-name-input');
+  files.forEach((f, idx) => {
+    let name = f.name;
+    if (inputs[idx]) {
+      name = inputs[idx].value.trim() || f.name;
+    }
+    if (!name.toLowerCase().endsWith('.pdf')) {
+      name += '.pdf';
+    }
+    zip.file(name, f.bytes);
+  });
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'split_pages.zip';
+  a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('ZIP downloaded!', 'success');
+}
+
+// ===== CONVERT =====
+async function loadConvertPDF(file) {
+  if (!file || !file.name.endsWith('.pdf')) { showToast('Please select a PDF file', 'error'); return; }
+  state.convertFile = file;
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    state.convertPages = pdf.numPages;
+    document.getElementById('convert-options').style.display = 'block';
+    document.getElementById('convert-info').textContent = `📄 ${file.name} — ${state.convertPages} pages — ${fmtSize(file.size)}`;
+    document.getElementById('convert-btn').disabled = false;
+    showToast(`Loaded: ${file.name}`, 'success');
+  } catch(e) { showToast('Could not read PDF: ' + e.message, 'error'); }
+}
+
+async function convertToImages() {
+  if (!state.convertFile) return;
+  const scale = parseFloat(document.querySelector('input[name="quality"]:checked').value);
+  setProgress('convert', 5, 'Initializing...');
+  const result = document.getElementById('convert-result'); result.innerHTML = '';
+  try {
+    const ab = await state.convertFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const imgData = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      setProgress('convert', 5 + Math.floor((i/pdf.numPages)*90), `Rendering page ${i}/${pdf.numPages}...`);
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      const dataUrl = canvas.toDataURL('image/png');
+      const ci = i;
+      imgData.push({ url: dataUrl, name: `page_${ci}.png` });
+      const card = document.createElement('div'); card.className = 'img-card';
+      card.innerHTML = `<img src="${dataUrl}" alt="Page ${ci}" style="cursor:pointer" />
+        <div class="img-card-footer" style="display:flex; align-items:center; justify-content:space-between; gap:6px; padding:8px 10px;">
+          <input type="text" class="img-name-input" value="page_${ci}.png" style="background:transparent; border:none; border-bottom:1px dashed rgba(255,255,255,0.3); color:#fff; font-family:inherit; font-size:0.78rem; padding:2px; outline:none; flex:1; min-width:0;" />
+          <button class="btn-preview-img" style="background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:#a78bfa;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;">👁</button>
+          <button class="btn-download-img" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.3);color:#00d4ff;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.75rem;font-weight:600;">⬇</button>
+        </div>`;
+      card.querySelector('.btn-preview-img').onclick = () => showImagePreview(imgData[ci-1].url, card.querySelector('.img-name-input').value.trim());
+      card.querySelector('.btn-download-img').onclick = () => {
+        const a=document.createElement('a');
+        a.href=imgData[ci-1].url;
+        let name = card.querySelector('.img-name-input').value.trim();
+        if (!name) name = `page_${ci}.png`;
+        const lowerName = name.toLowerCase();
+        if (!lowerName.endsWith('.png') && !lowerName.endsWith('.jpg') && !lowerName.endsWith('.jpeg') && !lowerName.endsWith('.gif')) {
+          name += '.png';
+        }
+        a.download=name;
+        a.click();
+      };
+      card.querySelector('img').onclick = () => showImagePreview(imgData[ci-1].url, card.querySelector('.img-name-input').value.trim());
+      result.appendChild(card);
+    }
+    setProgress('convert', 100, 'Done!');
+    showToast('Conversion complete!', 'success');
+    setTimeout(() => hideProgress('convert'), 1000);
+  } catch(e) { showToast('Error: ' + e.message, 'error'); hideProgress('convert'); }
+}
+
+// ===== PROTECT =====
+async function loadProtectPDF(file) {
+  if (!file || !file.name.endsWith('.pdf')) { showToast('Please select a PDF file', 'error'); return; }
+  state.protectFile = file;
+  document.getElementById('protect-options').style.display = 'block';
+  document.getElementById('protect-info').textContent = `📄 ${file.name} — ${fmtSize(file.size)}`;
+  document.getElementById('protect-btn').disabled = false;
+  document.getElementById('protect-pw').addEventListener('input', updateStrength);
+  showToast(`Loaded: ${file.name}`, 'success');
+}
+
+function updateStrength() {
+  const pw = document.getElementById('protect-pw').value;
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const bar = document.getElementById('protect-strength-bar');
+  const label = document.getElementById('protect-strength-label');
+  const colors = ['#ff4757','#ffa502','#eccc68','#2ed573'];
+  const labels = ['Weak','Fair','Good','Strong'];
+  bar.style.width = (score * 25) + '%';
+  bar.style.background = colors[score-1] || '#ff4757';
+  label.textContent = score > 0 ? labels[score-1] : '';
+  label.style.color = colors[score-1] || '#ff4757';
+}
+
+function togglePw(id) {
+  const inp = document.getElementById(id);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function protectPDF() {
+  if (!state.protectFile) return;
+  const pw = document.getElementById('protect-pw').value;
+  const pw2 = document.getElementById('protect-pw2').value;
+  if (!pw) { showToast('Please enter a password', 'error'); return; }
+  if (pw !== pw2) { showToast('Passwords do not match', 'error'); return; }
+  setProgress('protect', 15, 'Encrypting PDF via backend...');
+  try {
+    const formData = new FormData();
+    formData.append('pdf_file', state.protectFile);
+    formData.append('password', pw);
+    formData.append('perm_print', document.getElementById('perm-print').checked);
+    formData.append('perm_copy', document.getElementById('perm-copy').checked);
+    formData.append('perm_edit', document.getElementById('perm-edit').checked);
+
+    const resp = await fetch('http://localhost:5000/protect', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(errText || 'Failed to encrypt PDF');
+    }
+
+    const blob = await resp.blob();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+
+    setProgress('protect', 100, 'Encrypted!');
+    const fname = state.protectFile.name.replace(/\.pdf$/i, '') + '_protected.pdf';
+    const result = document.getElementById('protect-result'); result.innerHTML = '';
+
+    // Password info card
+    const info = document.createElement('div');
+    info.style.cssText = 'background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:12px 16px;margin-bottom:0.8rem;font-size:0.875rem;';
+    info.innerHTML = `🔐 <strong>Encrypted successfully!</strong><br>
+      Password: <code style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;color:#00d4ff;">${pw}</code>
+      ${document.getElementById('perm-print').checked ? '&nbsp;·&nbsp;No Print' : ''}
+      ${document.getElementById('perm-copy').checked ? '&nbsp;·&nbsp;No Copy' : ''}
+      ${document.getElementById('perm-edit').checked ? '&nbsp;·&nbsp;No Edit' : ''}`;
+    result.appendChild(info);
+
+    const item = makeResultItem('🔐', fname,
+      (newName) => downloadBytes(bytes, newName),
+      () => showPDFPreview(bytes, fname)
+    );
+    result.appendChild(item);
+    showToast('PDF encrypted & ready!', 'success');
+    setTimeout(() => hideProgress('protect'), 1000);
+  } catch(e) {
+    showToast('Encryption error: ' + e.message, 'error');
+    console.error(e);
+    hideProgress('protect');
+  }
+}
+
+// ===== FORM FILL / ANNOTATE =====
+async function loadFormPDF(file) {
+  if (!file || !file.name.endsWith('.pdf')) { showToast('Please select a PDF file', 'error'); return; }
+  state.formFile = file;
+  state.formAnnotations = [];
+  const viewer = document.getElementById('formfill-viewer');
+  viewer.innerHTML = '<div style="padding:2rem;text-align:center;color:#8890b0">Loading PDF...</div>';
+  try {
+    const ab = await file.arrayBuffer();
+    state.formPdfBytes = new Uint8Array(ab);
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    viewer.innerHTML = '';
+    const container = document.createElement('div'); container.className = 'pdf-page-container';
+    viewer.appendChild(container);
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vp = page.getViewport({ scale: 1.4 });
+      const wrap = document.createElement('div'); wrap.className = 'pdf-page-wrap';
+      wrap.style.width = vp.width + 'px';
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      const annotLayer = document.createElement('div');
+      annotLayer.className = 'annot-layer active-layer';
+      annotLayer.style.width = vp.width + 'px';
+      annotLayer.style.height = vp.height + 'px';
+      annotLayer.dataset.page = i;
+      annotLayer.addEventListener('click', (e) => handleAnnotClick(e, annotLayer, i));
+      wrap.appendChild(canvas); wrap.appendChild(annotLayer);
+      container.appendChild(wrap);
+    }
+    document.getElementById('formfill-toolbar').style.display = 'block';
+    showToast(`Loaded: ${file.name}`, 'success');
+  } catch(e) {
+    viewer.innerHTML = `<div style="padding:2rem;text-align:center;color:#ff6b6b">Error: ${e.message}</div>`;
+    showToast('Could not load PDF: ' + e.message, 'error');
+  }
+}
+
+function handleAnnotClick(e, layer, pageNum) {
+  const rect = layer.getBoundingClientRect();
+  const x = e.clientX - rect.left; const y = e.clientY - rect.top;
+  const color = document.getElementById('annot-color').value;
+  const size = parseInt(document.getElementById('annot-size').value);
+  if (state.annotTool === 'text') {
+    const el = document.createElement('div');
+    el.contentEditable = true; el.className = 'annot-text';
+    el.style.cssText = `position:absolute;left:${x}px;top:${y}px;color:${color};font-size:${size}px;
+      font-family:Inter,sans-serif;min-width:120px;outline:none;cursor:text;
+      background:rgba(0,0,0,0.3);padding:4px 8px;border-radius:4px;
+      border:1px dashed rgba(255,255,255,0.2);white-space:nowrap;`;
+    el.textContent = 'Type here...';
+    el.addEventListener('focus', () => { if(el.textContent==='Type here...') el.textContent=''; });
+    el.addEventListener('dblclick', (ev) => { ev.stopPropagation(); el.remove(); });
+    layer.appendChild(el); el.focus();
+    state.formAnnotations.push({ type:'text', x, y, page:pageNum });
+  } else if (state.annotTool === 'highlight') {
+    const el = document.createElement('div');
+    el.style.cssText = `position:absolute;left:${x-40}px;top:${y-10}px;width:120px;height:22px;
+      background:${color}55;border-radius:2px;pointer-events:none;`;
+    layer.appendChild(el);
+  } else if (state.annotTool === 'sign') {
+    showSignaturePad(x, y, layer, color, size);
+  }
+}
+
+function showSignaturePad(x, y, layer, color, size) {
+  const existing = document.getElementById('sig-overlay');
+  if (existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'sig-overlay';
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:flex;align-items:center;justify-content:center;`;
+  overlay.innerHTML = `<div style="background:#0d0f1e;border:1px solid rgba(255,255,255,0.1);border-radius:16px;padding:1.5rem;max-width:440px;width:95%;">
+    <h3 style="margin-bottom:1rem;font-size:1.1rem;">✍ Draw Signature</h3>
+    <canvas id="sig-canvas" width="400" height="160" style="background:#fff;border-radius:8px;cursor:crosshair;display:block;"></canvas>
+    <div style="display:flex;gap:0.8rem;margin-top:1rem;">
+      <button onclick="clearSig()" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#8890b0;cursor:pointer;">Clear</button>
+      <button onclick="applySig(${x},${y})" style="flex:2;padding:10px;border-radius:8px;border:none;background:linear-gradient(135deg,#7c5cfc,#a78bfa);color:white;font-weight:700;cursor:pointer;">Apply</button>
+      <button onclick="document.getElementById('sig-overlay').remove()" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05);color:#8890b0;cursor:pointer;">Cancel</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const canvas = document.getElementById('sig-canvas');
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  ctx.strokeStyle = color; ctx.lineWidth = size/8; ctx.lineCap = 'round';
+  canvas.addEventListener('mousedown', e => { drawing=true; ctx.beginPath(); ctx.moveTo(e.offsetX,e.offsetY); });
+  canvas.addEventListener('mousemove', e => { if(!drawing) return; ctx.lineTo(e.offsetX,e.offsetY); ctx.stroke(); });
+  canvas.addEventListener('mouseup', () => drawing=false);
+  window._sigLayer = layer; window._sigX = x; window._sigY = y;
+}
+
+function clearSig() {
+  const c = document.getElementById('sig-canvas');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+}
+
+function applySig(x, y) {
+  const canvas = document.getElementById('sig-canvas');
+  const dataUrl = canvas.toDataURL();
+  const layer = window._sigLayer;
+  const img = document.createElement('img');
+  img.src = dataUrl;
+  img.style.cssText = `position:absolute;left:${x-80}px;top:${y-40}px;width:160px;height:64px;object-fit:contain;pointer-events:none;`;
+  layer.appendChild(img);
+  document.getElementById('sig-overlay').remove();
+}
+
+function setAnnotTool(tool) {
+  state.annotTool = tool;
+  document.querySelectorAll('.tool-btn[id^="tool-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + tool).classList.add('active');
+}
+
+function clearAnnotations() {
+  document.querySelectorAll('.annot-layer').forEach(l => l.innerHTML = '');
+  state.formAnnotations = [];
+  showToast('Annotations cleared', 'info');
+}
+
+async function downloadAnnotatedPDF() {
+  showToast('Preparing annotated PDF...', 'info');
+  try {
+    const { PDFDocument, rgb, StandardFonts } = PDFLib;
+    const doc = await PDFDocument.load(state.formPdfBytes);
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    document.querySelectorAll('.annot-layer').forEach((layer, pi) => {
+      const page = doc.getPage(pi);
+      const { height } = page.getSize();
+      layer.querySelectorAll('.annot-text').forEach(el => {
+        const txt = el.textContent.trim();
+        if (!txt || txt === 'Type here...') return;
+        const elRect = el.getBoundingClientRect();
+        const layerRect = layer.getBoundingClientRect();
+        const rx = elRect.left - layerRect.left;
+        const ry = elRect.top - layerRect.top;
+        const scaleX = page.getWidth() / layer.offsetWidth;
+        const scaleY = page.getHeight() / layer.offsetHeight;
+        page.drawText(txt, {
+          x: rx * scaleX, y: height - (ry * scaleY) - 14,
+          size: 12, font, color: rgb(0.1, 0.3, 0.9)
+        });
+      });
+    });
+    const bytes = await doc.save();
+    const fname = state.formFile.name.replace('.pdf','') + '_annotated.pdf';
+    const result = document.getElementById('formfill-result');
+    result.innerHTML = '';
+    const item = makeResultItem('📝', fname,
+      (newName) => downloadBytes(bytes, newName),
+      () => showPDFPreview(bytes, fname)
+    );
+    result.appendChild(item);
+    showToast('Annotated PDF ready!', 'success');
+  } catch(e) {
+    showToast('Error saving PDF: ' + e.message, 'error');
+  }
+}
+
+// ===== NAVBAR SCROLL =====
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').style.background =
+    window.scrollY > 20 ? 'rgba(7,8,15,0.95)' : 'rgba(7,8,15,0.85)';
+});
+
+// ===== SPLIT RANGE TOGGLE =====
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input[name="split-mode"]').forEach(r => {
+    r.addEventListener('change', () => {
+      document.getElementById('split-range-inputs').style.display = r.value === 'range' ? 'flex' : 'none';
+    });
+  });
+});
+
+
+// ===== PDF PASSWORD CRACKER =====
+state.crackFile = null;
+
+function toggleGpuOpts() {
+  const isGpu = document.getElementById('crack-gpu').checked;
+  document.getElementById('gpu-opts-wrap').style.display = isGpu ? 'block' : 'none';
+}
+
+async function loadCrackPDF(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Please select a PDF file', 'error'); return;
+  }
+  state.crackFile = file;
+  document.getElementById('crack-options').style.display = 'block';
+  document.getElementById('crack-btn').disabled = false;
+
+  const infoEl = document.getElementById('crack-info');
+  infoEl.textContent = 'Analyzing PDF file...';
+  infoEl.style.color = 'var(--text-muted)';
+
+  try {
+    const ab = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    // If it loads without error, it is not encrypted
+    infoEl.textContent = `PDF: ${file.name} — ${pdf.numPages} pages — ${fmtSize(file.size)} (Note: This PDF is NOT password protected!)`;
+    infoEl.style.color = '#ff6b6b';
+  } catch (err) {
+    if (err.name === 'PasswordException') {
+      infoEl.textContent = `PDF: ${file.name} — ${fmtSize(file.size)} — Password protection detected`;
+      infoEl.style.color = '#2ed573';
+    } else {
+      infoEl.textContent = `PDF: ${file.name} — ${fmtSize(file.size)}`;
+      infoEl.style.color = 'var(--text-muted)';
+    }
+  }
+  showToast(`Loaded: ${file.name}`, 'success');
+}
+
+let isCrackingPolling = false;
+
+async function startCracking() {
+  if (!state.crackFile) return;
+
+  const wordlist = document.getElementById('crack-wordlist').checked ? 'on' : 'off';
+  const patterns = document.getElementById('crack-patterns').checked ? 'on' : 'off';
+  const rules = document.getElementById('crack-rules').checked ? 'on' : 'off';
+  const gpu = document.getElementById('crack-gpu').checked ? 'on' : 'off';
+  const hashcatOpts = document.getElementById('crack-hashcat-opts').value.trim() || '-m 10500';
+
+  const formData = new FormData();
+  formData.append('pdf_file', state.crackFile, state.crackFile.name);
+  formData.append('use_wordlist', wordlist);
+  formData.append('use_patterns', patterns);
+  formData.append('use_rules', rules);
+  formData.append('use_gpu', gpu);
+  formData.append('hashcat_opts', hashcatOpts);
+
+  document.getElementById('crack-status-text').textContent = 'Uploading...';
+  document.getElementById('crack-status-text').style.color = 'var(--accent2)';
+  document.getElementById('crack-spinner').style.display = 'inline-block';
+  document.getElementById('crack-recovered-pw').textContent = '-';
+  document.getElementById('crack-recovered-pw').style.color = '#fff';
+  document.getElementById('crack-current-pw').textContent = '-';
+  document.getElementById('crack-console-log').textContent = 'Uploading PDF and starting threads...';
+  document.getElementById('crack-status-wrap').style.display = 'block';
+  document.getElementById('crack-result').innerHTML = '';
+  document.getElementById('crack-btn').disabled = true;
+
+  try {
+    const resp = await fetch('http://localhost:5000/', {
+      method: 'POST',
+      body: formData
+    });
+    if (!resp.ok) {
+      throw new Error('Server returned an error');
+    }
+    // Start polling status
+    isCrackingPolling = true;
+    setTimeout(pollCrackStatus, 500);
+  } catch (err) {
+    showToast('Failed to connect to cracking tool server', 'error');
+    document.getElementById('crack-status-text').textContent = 'Connection Error';
+    document.getElementById('crack-status-text').style.color = '#ff4757';
+    document.getElementById('crack-spinner').style.display = 'none';
+    document.getElementById('crack-console-log').textContent = `Error connecting to http://localhost:5000/\nMake sure the python tool is running (run 'python "Pdf password tool.py"' in your terminal).`;
+    document.getElementById('crack-btn').disabled = false;
+  }
+}
+
+async function pollCrackStatus() {
+  if (!isCrackingPolling) return;
+
+  try {
+    const resp = await fetch('http://localhost:5000/status-json');
+    if (!resp.ok) throw new Error('Status poll failed');
+    const data = await resp.json();
+
+    const status = data.status;
+    const attempts = data.attempts || 0;
+    const totalWords = data.total_words || 0;
+    const percentage = data.percentage || 0;
+    const threadsActive = data.threads_active || 0;
+    const currentPw = data.current_password || '-';
+    const recoveredPw = data.password || '';
+    const logLines = data.log || [];
+
+    // Update status text
+    const statusTextEl = document.getElementById('crack-status-text');
+    if (status === 'cracking') {
+      statusTextEl.textContent = 'Cracking...';
+      statusTextEl.style.color = 'var(--accent2)';
+    } else if (status === 'done') {
+      statusTextEl.textContent = 'Done!';
+      statusTextEl.style.color = '#2ed573';
+    } else if (status === 'not_found') {
+      statusTextEl.textContent = 'Not Found';
+      statusTextEl.style.color = '#ff9f43';
+    } else if (status === 'error') {
+      statusTextEl.textContent = 'Error';
+      statusTextEl.style.color = '#ff4757';
+    }
+
+    // Update thread count and progress
+    document.getElementById('crack-threads-count').textContent = `Active Threads: ${threadsActive}`;
+    document.getElementById('crack-fill').style.width = `${percentage}%`;
+    document.getElementById('crack-progress-label').textContent = `${percentage}% Complete`;
+    document.getElementById('crack-attempts-label').textContent = `${attempts.toLocaleString()} / ${totalWords.toLocaleString()} variations`;
+    document.getElementById('crack-current-pw').textContent = currentPw;
+
+    // Log window update
+    const logBox = document.getElementById('crack-console-log');
+    logBox.textContent = logLines.join('\n');
+    logBox.scrollTop = logBox.scrollHeight;
+
+    if (status === 'cracking') {
+      setTimeout(pollCrackStatus, 400);
+    } else {
+      isCrackingPolling = false;
+      document.getElementById('crack-spinner').style.display = 'none';
+      document.getElementById('crack-btn').disabled = false;
+
+      const resultArea = document.getElementById('crack-result');
+      resultArea.innerHTML = '';
+
+      if (status === 'done') {
+        document.getElementById('crack-recovered-pw').textContent = recoveredPw;
+        document.getElementById('crack-recovered-pw').style.color = '#2ed573';
+        showToast('Password recovered successfully!', 'success');
+
+        // Create success card
+        const card = document.createElement('div');
+        card.style.cssText = 'background:rgba(46,213,115,0.06); border:1px solid rgba(46,213,115,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
+        card.innerHTML = `
+          <strong style="color:#2ed573; font-size:1.05rem;">🎉 Success! Password Found</strong><br>
+          The recovered password is: <code style="background:rgba(255,255,255,0.08); padding:3px 10px; border-radius:4px; color:#2ed573; font-weight:bold; font-size:1.1rem; letter-spacing:0.5px;">${recoveredPw}</code><br>
+          <span style="color:var(--text-muted); font-size:0.85rem;">You can now download the fully decrypted PDF below.</span>
+        `;
+        resultArea.appendChild(card);
+
+        // Add result actions (Download & Preview)
+        const fname = state.crackFile.name.replace(/\.pdf$/i, '') + '_decrypted.pdf';
+        const actionItem = makeResultItem('📄', fname,
+          async (newName) => {
+            try {
+              showToast('Downloading decrypted PDF...', 'info');
+              const resp = await fetch('http://localhost:5000/download');
+              const buffer = await resp.arrayBuffer();
+              downloadBytes(new Uint8Array(buffer), newName);
+            } catch (err) {
+              showToast('Download failed: ' + err.message, 'error');
+            }
+          },
+          async () => {
+            try {
+              const previewResp = await fetch('http://localhost:5000/download');
+              const buffer = await previewResp.arrayBuffer();
+              showPDFPreview(new Uint8Array(buffer), fname);
+            } catch (err) {
+              showToast('Failed to load preview: ' + err.message, 'error');
+            }
+          }
+        );
+        resultArea.appendChild(actionItem);
+
+      } else if (status === 'not_found') {
+        showToast('Password not found in dictionary/patterns', 'warning');
+        const card = document.createElement('div');
+        card.style.cssText = 'background:rgba(255,159,67,0.06); border:1px solid rgba(255,159,67,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
+        card.innerHTML = `
+          <strong style="color:#ff9f43; font-size:1.05rem;">🔍 Password Not Found</strong><br>
+          <span style="color:var(--text-muted); font-size:0.85rem;">All variations and wordlist entries have been exhausted. Try enabling rules or using a larger wordlist (like rockyou.txt).</span>
+        `;
+        resultArea.appendChild(card);
+      } else if (status === 'error') {
+        showToast('Cracking job failed', 'error');
+        const card = document.createElement('div');
+        card.style.cssText = 'background:rgba(255,71,87,0.06); border:1px solid rgba(255,71,87,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
+        card.innerHTML = `
+          <strong style="color:#ff4757; font-size:1.05rem;">❌ Cracking Error</strong><br>
+          <span style="color:var(--text-muted); font-size:0.85rem;">An error occurred during execution. Check the logs above for more details.</span>
+        `;
+        resultArea.appendChild(card);
+      }
+    }
+  } catch (err) {
+    console.error('Polling error', err);
+    // don't stop polling on momentary network drop, but wait longer
+    setTimeout(pollCrackStatus, 1000);
+  }
+}

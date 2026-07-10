@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDFXpress – Your Complete PDF Toolkit</title>
+  <meta name="description" content="Free online PDF tools: Merge, Split, Convert to Image, Password Protect, Remove Password, and Form Fill PDFs instantly in your browser." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- NAV -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-inner">
+      <div class="logo">
+        <span class="logo-icon">⚡</span>
+        <span class="logo-text">PDF<span class="accent">Xpress</span></span>
+      </div>
+      <ul class="nav-links">
+        <li><a href="#tools">Tools</a></li>
+        <li><a href="#how">How it Works</a></li>
+        <li><a href="#features">Features</a></li>
+      </ul>
+      <span class="nav-badge">100% Free · Browser-Based</span>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <div class="hero-tag">✦ No Upload Required · Works Offline</div>
+      <h1>Your Complete<br /><span class="gradient-text">PDF Toolkit</span></h1>
+      <p class="hero-sub">Merge, Split, Convert, Protect & Fill — all inside your browser. No server. No signup. 100% private.</p>
+      <a href="#tools" class="btn-primary">Explore Tools ↓</a>
+    </div>
+    <div class="hero-cards">
+      <div class="floating-card c1">📎 Merge PDF</div>
+      <div class="floating-card c2">✂️ Split PDF</div>
+      <div class="floating-card c3">🖼️ PDF → Image</div>
+      <div class="floating-card c4">🔐 Protect PDF</div>
+      <div class="floating-card c5">📝 Form Fill</div>
+      <div class="floating-card c6">🔓 Crack PDF</div>
+    </div>
+  </section>
+
+  <!-- TOOLS GRID -->
+  <section class="tools-section" id="tools">
+    <div class="container">
+      <div class="section-header">
+        <h2>Choose Your Tool</h2>
+        <p>Click any tool to get started instantly</p>
+      </div>
+      <div class="tools-grid">
+        <div class="tool-card" onclick="openTool('merge')" id="card-merge">
+          <div class="tool-icon">📎</div>
+          <h3>PDF Merger</h3>
+          <p>Combine multiple PDFs into one seamless document</p>
+          <span class="tool-tag">Merge</span>
+        </div>
+        <div class="tool-card" onclick="openTool('split')" id="card-split">
+          <div class="tool-icon">✂️</div>
+          <h3>PDF Splitter</h3>
+          <p>Extract pages or split PDF into separate files</p>
+          <span class="tool-tag">Split</span>
+        </div>
+        <div class="tool-card" onclick="openTool('convert')" id="card-convert">
+          <div class="tool-icon">🖼️</div>
+          <h3>PDF → Image</h3>
+          <p>Convert each PDF page to high-quality PNG/JPG</p>
+          <span class="tool-tag">Convert</span>
+        </div>
+        <div class="tool-card" onclick="openTool('protect')" id="card-protect">
+          <div class="tool-icon">🔐</div>
+          <h3>PDF Protector</h3>
+          <p>Add password encryption to secure your PDF</p>
+          <span class="tool-tag">Protect</span>
+        </div>
+        <div class="tool-card" onclick="openTool('formfill')" id="card-formfill">
+          <div class="tool-icon">📝</div>
+          <h3>Form Filler</h3>
+          <p>Fill and annotate PDF forms interactively</p>
+          <span class="tool-tag">Form</span>
+        </div>
+        <div class="tool-card unlock-card" onclick="openTool('unlock')" id="card-unlock">
+          <div class="tool-icon">🔓</div>
+          <h3>Password Cracker</h3>
+          <p>Recover lost passwords using wordlist dictionary attack, patterns, or rules</p>
+          <span class="tool-tag" style="background:rgba(0,212,255,0.15);color:#00d4ff;border-color:rgba(0,212,255,0.2);">Crack</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOOL PANELS -->
+  <div class="tool-panels" id="tool-panels">
+
+    <!-- MERGE -->
+    <div class="panel" id="panel-merge">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>📎 PDF Merger</h2>
+        <p>Upload multiple PDFs — they'll be merged in order</p>
+      </div>
+      <div class="drop-zone" id="merge-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'merge')" onclick="document.getElementById('merge-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag & Drop PDFs here or <span class="link">Browse Files</span></div>
+        <div class="drop-hint">Supports multiple files • PDF only</div>
+        <input type="file" id="merge-input" multiple accept=".pdf" style="display:none" onchange="addFiles('merge', this.files)" />
+      </div>
+      <div class="file-list" id="merge-list"></div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="mergePDFs()" id="merge-btn" disabled>⚡ Merge PDFs</button>
+      </div>
+      <div class="progress-wrap" id="merge-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="merge-fill"></div></div>
+        <div class="progress-label" id="merge-label">Processing...</div>
+      </div>
+      <div class="result-area" id="merge-result"></div>
+    </div>
+
+    <!-- SPLIT -->
+    <div class="panel" id="panel-split">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>✂️ PDF Splitter</h2>
+        <p>Extract specific pages or split every page individually</p>
+      </div>
+      <div class="drop-zone" id="split-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'split')" onclick="document.getElementById('split-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag & Drop a PDF here or <span class="link">Browse File</span></div>
+        <div class="drop-hint">Single PDF file only</div>
+        <input type="file" id="split-input" accept=".pdf" style="display:none" onchange="loadSplitPDF(this.files[0])" />
+      </div>
+      <div id="split-options" style="display:none">
+        <div class="option-group">
+          <label class="option-label">Split Mode:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="split-mode" value="all" checked /> Extract All Pages (individual files)</label>
+            <label><input type="radio" name="split-mode" value="range" /> Extract Page Range</label>
+          </div>
+        </div>
+        <div class="range-inputs" id="split-range-inputs" style="display:none">
+          <input type="number" id="split-from" placeholder="From page" min="1" class="num-input" />
+          <span>to</span>
+          <input type="number" id="split-to" placeholder="To page" min="1" class="num-input" />
+        </div>
+        <div class="pdf-info" id="split-info"></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="splitPDF()" id="split-btn" disabled>⚡ Split PDF</button>
+      </div>
+      <div class="progress-wrap" id="split-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="split-fill"></div></div>
+        <div class="progress-label" id="split-label">Processing...</div>
+      </div>
+      <div class="result-area" id="split-result"></div>
+    </div>
+
+    <!-- CONVERT -->
+    <div class="panel" id="panel-convert">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>🖼️ PDF → Image</h2>
+        <p>Convert PDF pages to high-quality PNG images</p>
+      </div>
+      <div class="drop-zone" id="convert-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'convert')" onclick="document.getElementById('convert-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag & Drop a PDF here or <span class="link">Browse File</span></div>
+        <input type="file" id="convert-input" accept=".pdf" style="display:none" onchange="loadConvertPDF(this.files[0])" />
+      </div>
+      <div id="convert-options" style="display:none">
+        <div class="option-group">
+          <label class="option-label">Quality:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="quality" value="1" /> Standard (72 DPI)</label>
+            <label><input type="radio" name="quality" value="2" checked /> High (144 DPI)</label>
+            <label><input type="radio" name="quality" value="3" /> Ultra (216 DPI)</label>
+          </div>
+        </div>
+        <div class="pdf-info" id="convert-info"></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="convertToImages()" id="convert-btn" disabled>⚡ Convert to Images</button>
+      </div>
+      <div class="progress-wrap" id="convert-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="convert-fill"></div></div>
+        <div class="progress-label" id="convert-label">Rendering pages...</div>
+      </div>
+      <div class="image-grid" id="convert-result"></div>
+    </div>
+
+    <!-- PROTECT -->
+    <div class="panel" id="panel-protect">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>🔐 PDF Protector</h2>
+        <p>Add password encryption to your PDF document</p>
+      </div>
+      <div class="drop-zone" id="protect-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'protect')" onclick="document.getElementById('protect-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag & Drop a PDF here or <span class="link">Browse File</span></div>
+        <input type="file" id="protect-input" accept=".pdf" style="display:none" onchange="loadProtectPDF(this.files[0])" />
+      </div>
+      <div id="protect-options" style="display:none">
+        <div class="password-fields">
+          <div class="field-group">
+            <label>User Password <span class="hint-text">(required to open PDF)</span></label>
+            <div class="pw-input-wrap">
+              <input type="password" id="protect-pw" placeholder="Enter password" class="pw-input" />
+              <button class="pw-toggle" onclick="togglePw('protect-pw')">👁</button>
+            </div>
+          </div>
+          <div class="field-group">
+            <label>Confirm Password</label>
+            <div class="pw-input-wrap">
+              <input type="password" id="protect-pw2" placeholder="Confirm password" class="pw-input" />
+              <button class="pw-toggle" onclick="togglePw('protect-pw2')">👁</button>
+            </div>
+          </div>
+        </div>
+        <div class="strength-bar-wrap">
+          <div class="strength-bar" id="protect-strength-bar"></div>
+          <span id="protect-strength-label" class="strength-label"></span>
+        </div>
+        <div class="permissions-section">
+          <label class="option-label">Restrict Permissions (optional):</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" id="perm-print" /> Disable Printing</label>
+            <label><input type="checkbox" id="perm-copy" /> Disable Copying</label>
+            <label><input type="checkbox" id="perm-edit" /> Disable Editing</label>
+          </div>
+        </div>
+        <div class="pdf-info" id="protect-info"></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="protectPDF()" id="protect-btn" disabled>🔐 Encrypt & Download</button>
+      </div>
+      <div class="progress-wrap" id="protect-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="protect-fill"></div></div>
+        <div class="progress-label" id="protect-label">Encrypting...</div>
+      </div>
+      <div class="result-area" id="protect-result"></div>
+    </div>
+
+    <!-- FORM FILL -->
+    <div class="panel" id="panel-formfill">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>📝 PDF Form Filler</h2>
+        <p>View, annotate, and fill your PDF interactively</p>
+      </div>
+      <div class="drop-zone" id="formfill-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'formfill')" onclick="document.getElementById('formfill-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag & Drop a PDF here or <span class="link">Browse File</span></div>
+        <input type="file" id="formfill-input" accept=".pdf" style="display:none" onchange="loadFormPDF(this.files[0])" />
+      </div>
+      <div id="formfill-toolbar" style="display:none">
+        <div class="toolbar">
+          <button class="tool-btn active" id="tool-text" onclick="setAnnotTool('text')">📝 Text</button>
+          <button class="tool-btn" id="tool-highlight" onclick="setAnnotTool('highlight')">🖊 Highlight</button>
+          <button class="tool-btn" id="tool-sign" onclick="setAnnotTool('sign')">✍ Signature</button>
+          <div class="toolbar-sep"></div>
+          <input type="color" id="annot-color" value="#6c63ff" class="color-pick" title="Color" />
+          <select id="annot-size" class="size-select">
+            <option value="12">12px</option>
+            <option value="16" selected>16px</option>
+            <option value="20">20px</option>
+            <option value="28">28px</option>
+          </select>
+          <div class="toolbar-sep"></div>
+          <button class="tool-btn danger" onclick="clearAnnotations()">🗑 Clear</button>
+          <button class="tool-btn success" onclick="downloadAnnotatedPDF()">💾 Save PDF</button>
+        </div>
+      </div>
+      <div id="formfill-viewer" class="pdf-viewer-wrap"></div>
+      <div class="result-area" id="formfill-result" style="margin-top:1.5rem;"></div>
+    </div>
+
+    <!-- UNLOCK (CRACKER) -->
+    <div class="panel" id="panel-unlock">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>🔓 PDF Password Cracker</h2>
+        <p>Recover lost passwords using wordlist dictionary attack, patterns, or rules (runs locally)</p>
+      </div>
+
+      <div class="drop-zone" id="crack-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'unlock')" onclick="document.getElementById('crack-input').click()">
+        <div class="drop-icon">🔓</div>
+        <div class="drop-text">Drag & Drop your password-protected PDF or <span class="link">Browse File</span></div>
+        <div class="drop-hint">Single PDF file</div>
+        <input type="file" id="crack-input" accept=".pdf" style="display:none" onchange="loadCrackPDF(this.files[0])" />
+      </div>
+
+      <div id="crack-options" style="display:none">
+        <div class="pdf-info" id="crack-info"></div>
+
+        <!-- Cracking options checkboxes -->
+        <div class="permissions-section" style="margin-top:1.5rem;">
+          <label class="option-label">Select Cracking Methods:</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" id="crack-wordlist" checked /> Wordlist (Standard)</label>
+            <label><input type="checkbox" id="crack-patterns" /> Patterns (Numbers & Seq)</label>
+            <label><input type="checkbox" id="crack-rules" /> Rules (Mutations)</label>
+          </div>
+        </div>
+
+        <!-- GPU Acceleration checkbox -->
+        <div class="permissions-section" style="margin-top:1rem;">
+          <label class="option-label">Hardware Acceleration:</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" id="crack-gpu" onchange="toggleGpuOpts()" /> Use GPU (Hashcat)</label>
+          </div>
+          <div id="gpu-opts-wrap" style="display:none; margin-top:0.8rem;">
+            <label style="display:block; font-size:0.85rem; margin-bottom:0.4rem; color:var(--text-muted);">Hashcat Arguments:</label>
+            <input type="text" id="crack-hashcat-opts" value="-m 10500" class="pw-input" style="max-width:300px; padding:8px 12px;" />
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar" style="margin-top:1.5rem;">
+        <button class="btn-action" onclick="startCracking()" id="crack-btn" disabled
+          style="background:linear-gradient(135deg,var(--accent2),#0088cc);">🚀 Start Cracking</button>
+      </div>
+
+      <!-- Live progress stats -->
+      <div id="crack-status-wrap" style="display:none; margin-top:2rem; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <h4 style="margin:0; color:#fff; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+            <span class="spinner" id="crack-spinner" style="display:inline-block; width:16px; height:16px; border:2px solid var(--accent2); border-top-color:transparent; border-radius:50%;"></span>
+            Status: <span id="crack-status-text" style="color:var(--accent2); font-weight:700;">Ready</span>
+          </h4>
+          <span id="crack-threads-count" style="font-size:0.82rem; color:#2ed573; background:rgba(46,213,115,0.1); padding:4px 10px; border-radius:20px; font-weight:600;">Active Threads: 0</span>
+        </div>
+
+        <div class="progress-wrap" id="crack-progress" style="margin-bottom:1.5rem;">
+          <div class="progress-bar"><div class="progress-fill" id="crack-fill" style="width:0%"></div></div>
+          <div style="display:flex; justify-content:space-between; margin-top:0.4rem; font-size:0.82rem; color:var(--text-muted);">
+            <span id="crack-progress-label">0.0% Complete</span>
+            <span id="crack-attempts-label">0 / 0 variations</span>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:1rem; border-radius:10px;">
+            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold; letter-spacing:0.5px;">Current Password Checked</span>
+            <div id="crack-current-pw" style="font-size:1.2rem; font-family:monospace; color:#fff; margin-top:0.3rem; word-break:break-all; min-height:1.8rem;">-</div>
+          </div>
+          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:1rem; border-radius:10px;">
+            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold; letter-spacing:0.5px;">Recovered Password</span>
+            <div id="crack-recovered-pw" style="font-size:1.2rem; font-family:monospace; color:#2ed573; margin-top:0.3rem; word-break:break-all; font-weight:bold; min-height:1.8rem;">-</div>
+          </div>
+        </div>
+
+        <!-- Monospace Console Log -->
+        <label style="display:block; font-size:0.85rem; font-weight:bold; margin-bottom:0.5rem; color:var(--text-muted);">Detailed Cracking Log:</label>
+        <div id="crack-console-log" style="background:#0a0e17; border:1px solid rgba(255,255,255,0.08); font-family:monospace; font-size:0.8rem; color:#8890b0; padding:1rem; border-radius:8px; height:200px; overflow-y:auto; line-height:1.5; white-space:pre-wrap;">Console log will stream here...</div>
+      </div>
+
+      <div class="result-area" id="crack-result"></div>
+      
+      <p style="color:var(--text-muted); font-size:0.8rem; margin-top:1.5rem; text-align:center;">
+        Note: Ensure that the cracking script is running in your terminal: 
+        <code style="background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:4px; color:var(--accent2); font-family:monospace;">python "Pdf password tool.py"</code>
+      </p>
+    </div>
+
+  </div><!-- end panels -->
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section" id="how">
+    <div class="container">
+      <div class="section-header">
+        <h2>How It Works</h2>
+        <p>Three steps to process any PDF</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">01</div>
+          <div class="step-icon">📂</div>
+          <h3>Upload PDF</h3>
+          <p>Drag & drop or click to browse. Your file stays in your browser — never uploaded to any server.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">02</div>
+          <div class="step-icon">⚙️</div>
+          <h3>Choose Options</h3>
+          <p>Configure settings like page range, password, image quality, or annotation preferences.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">03</div>
+          <div class="step-icon">⬇️</div>
+          <h3>Download Result</h3>
+          <p>Get your processed PDF or images instantly — everything is processed client-side, privately.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-header">
+        <h2>Why PDFXpress?</h2>
+      </div>
+      <div class="features-grid">
+        <div class="feat-card"><span class="feat-icon">🔒</span><h4>100% Private</h4><p>Files never leave your device</p></div>
+        <div class="feat-card"><span class="feat-icon">⚡</span><h4>Instant Processing</h4><p>No waiting, no queue</p></div>
+        <div class="feat-card"><span class="feat-icon">🆓</span><h4>Always Free</h4><p>No limits, no sign-up</p></div>
+        <div class="feat-card"><span class="feat-icon">📱</span><h4>Mobile Ready</h4><p>Works on any device</p></div>
+        <div class="feat-card"><span class="feat-icon">🌐</span><h4>Offline Support</h4><p>Works without internet</p></div>
+        <div class="feat-card"><span class="feat-icon">🎯</span><h4>No Watermarks</h4><p>Clean output every time</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="logo"><span class="logo-icon">⚡</span><span class="logo-text">PDF<span class="accent">Xpress</span></span></div>
+        <p class="footer-text">All processing happens locally in your browser. No data is sent to any server.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- LIBS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

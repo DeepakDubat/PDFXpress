@@ -32,16 +32,14 @@
     <div class="hero-content">
       <div class="hero-tag">✦ No Upload Required · Works Offline</div>
       <h1>Your Complete<br /><span class="gradient-text">PDF Toolkit</span></h1>
-      <p class="hero-sub">Merge, Split, Convert, Protect & Fill — all inside your browser. No server. No signup. 100% private.</p>
+      <p class="hero-sub">Merge, Split, Convert & Fill — all inside your browser. No server. No signup. 100% private.</p>
       <a href="#tools" class="btn-primary">Explore Tools ↓</a>
     </div>
     <div class="hero-cards">
       <div class="floating-card c1">📎 Merge PDF</div>
       <div class="floating-card c2">✂️ Split PDF</div>
       <div class="floating-card c3">🖼️ PDF → Image</div>
-      <div class="floating-card c4">🔐 Protect PDF</div>
       <div class="floating-card c5">📝 Form Fill</div>
-      <div class="floating-card c6">🔓 Crack PDF</div>
     </div>
   </section>
 
@@ -71,23 +69,11 @@
           <p>Convert each PDF page to high-quality PNG/JPG</p>
           <span class="tool-tag">Convert</span>
         </div>
-        <div class="tool-card" onclick="openTool('protect')" id="card-protect">
-          <div class="tool-icon">🔐</div>
-          <h3>PDF Protector</h3>
-          <p>Add password encryption to secure your PDF</p>
-          <span class="tool-tag">Protect</span>
-        </div>
         <div class="tool-card" onclick="openTool('formfill')" id="card-formfill">
           <div class="tool-icon">📝</div>
           <h3>Form Filler</h3>
           <p>Fill and annotate PDF forms interactively</p>
           <span class="tool-tag">Form</span>
-        </div>
-        <div class="tool-card unlock-card" onclick="openTool('unlock')" id="card-unlock">
-          <div class="tool-icon">🔓</div>
-          <h3>Password Cracker</h3>
-          <p>Recover lost passwords using wordlist dictionary attack, patterns, or rules</p>
-          <span class="tool-tag" style="background:rgba(0,212,255,0.15);color:#00d4ff;border-color:rgba(0,212,255,0.2);">Crack</span>
         </div>
       </div>
     </div>
@@ -191,58 +177,6 @@
       <div class="image-grid" id="convert-result"></div>
     </div>
 
-    <!-- PROTECT -->
-    <div class="panel" id="panel-protect">
-      <div class="panel-header">
-        <button class="back-btn" onclick="closeTool()">← Back</button>
-        <h2>🔐 PDF Protector</h2>
-        <p>Add password encryption to your PDF document</p>
-      </div>
-      <div class="drop-zone" id="protect-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'protect')" onclick="document.getElementById('protect-input').click()">
-        <div class="drop-icon">📂</div>
-        <div class="drop-text">Drag & Drop a PDF here or <span class="link">Browse File</span></div>
-        <input type="file" id="protect-input" accept=".pdf" style="display:none" onchange="loadProtectPDF(this.files[0])" />
-      </div>
-      <div id="protect-options" style="display:none">
-        <div class="password-fields">
-          <div class="field-group">
-            <label>User Password <span class="hint-text">(required to open PDF)</span></label>
-            <div class="pw-input-wrap">
-              <input type="password" id="protect-pw" placeholder="Enter password" class="pw-input" />
-              <button class="pw-toggle" onclick="togglePw('protect-pw')">👁</button>
-            </div>
-          </div>
-          <div class="field-group">
-            <label>Confirm Password</label>
-            <div class="pw-input-wrap">
-              <input type="password" id="protect-pw2" placeholder="Confirm password" class="pw-input" />
-              <button class="pw-toggle" onclick="togglePw('protect-pw2')">👁</button>
-            </div>
-          </div>
-        </div>
-        <div class="strength-bar-wrap">
-          <div class="strength-bar" id="protect-strength-bar"></div>
-          <span id="protect-strength-label" class="strength-label"></span>
-        </div>
-        <div class="permissions-section">
-          <label class="option-label">Restrict Permissions (optional):</label>
-          <div class="checkbox-group">
-            <label><input type="checkbox" id="perm-print" /> Disable Printing</label>
-            <label><input type="checkbox" id="perm-copy" /> Disable Copying</label>
-            <label><input type="checkbox" id="perm-edit" /> Disable Editing</label>
-          </div>
-        </div>
-        <div class="pdf-info" id="protect-info"></div>
-      </div>
-      <div class="action-bar">
-        <button class="btn-action" onclick="protectPDF()" id="protect-btn" disabled>🔐 Encrypt & Download</button>
-      </div>
-      <div class="progress-wrap" id="protect-progress" style="display:none">
-        <div class="progress-bar"><div class="progress-fill" id="protect-fill"></div></div>
-        <div class="progress-label" id="protect-label">Encrypting...</div>
-      </div>
-      <div class="result-area" id="protect-result"></div>
-    </div>
 
     <!-- FORM FILL -->
     <div class="panel" id="panel-formfill">
@@ -278,94 +212,6 @@
       <div class="result-area" id="formfill-result" style="margin-top:1.5rem;"></div>
     </div>
 
-    <!-- UNLOCK (CRACKER) -->
-    <div class="panel" id="panel-unlock">
-      <div class="panel-header">
-        <button class="back-btn" onclick="closeTool()">← Back</button>
-        <h2>🔓 PDF Password Cracker</h2>
-        <p>Recover lost passwords using wordlist dictionary attack, patterns, or rules (runs locally)</p>
-      </div>
-
-      <div class="drop-zone" id="crack-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'unlock')" onclick="document.getElementById('crack-input').click()">
-        <div class="drop-icon">🔓</div>
-        <div class="drop-text">Drag & Drop your password-protected PDF or <span class="link">Browse File</span></div>
-        <div class="drop-hint">Single PDF file</div>
-        <input type="file" id="crack-input" accept=".pdf" style="display:none" onchange="loadCrackPDF(this.files[0])" />
-      </div>
-
-      <div id="crack-options" style="display:none">
-        <div class="pdf-info" id="crack-info"></div>
-
-        <!-- Cracking options checkboxes -->
-        <div class="permissions-section" style="margin-top:1.5rem;">
-          <label class="option-label">Select Cracking Methods:</label>
-          <div class="checkbox-group">
-            <label><input type="checkbox" id="crack-wordlist" checked /> Wordlist (Standard)</label>
-            <label><input type="checkbox" id="crack-patterns" /> Patterns (Numbers & Seq)</label>
-            <label><input type="checkbox" id="crack-rules" /> Rules (Mutations)</label>
-          </div>
-        </div>
-
-        <!-- GPU Acceleration checkbox -->
-        <div class="permissions-section" style="margin-top:1rem;">
-          <label class="option-label">Hardware Acceleration:</label>
-          <div class="checkbox-group">
-            <label><input type="checkbox" id="crack-gpu" onchange="toggleGpuOpts()" /> Use GPU (Hashcat)</label>
-          </div>
-          <div id="gpu-opts-wrap" style="display:none; margin-top:0.8rem;">
-            <label style="display:block; font-size:0.85rem; margin-bottom:0.4rem; color:var(--text-muted);">Hashcat Arguments:</label>
-            <input type="text" id="crack-hashcat-opts" value="-m 10500" class="pw-input" style="max-width:300px; padding:8px 12px;" />
-          </div>
-        </div>
-      </div>
-
-      <div class="action-bar" style="margin-top:1.5rem;">
-        <button class="btn-action" onclick="startCracking()" id="crack-btn" disabled
-          style="background:linear-gradient(135deg,var(--accent2),#0088cc);">🚀 Start Cracking</button>
-      </div>
-
-      <!-- Live progress stats -->
-      <div id="crack-status-wrap" style="display:none; margin-top:2rem; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:12px; padding:1.5rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-          <h4 style="margin:0; color:#fff; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
-            <span class="spinner" id="crack-spinner" style="display:inline-block; width:16px; height:16px; border:2px solid var(--accent2); border-top-color:transparent; border-radius:50%;"></span>
-            Status: <span id="crack-status-text" style="color:var(--accent2); font-weight:700;">Ready</span>
-          </h4>
-          <span id="crack-threads-count" style="font-size:0.82rem; color:#2ed573; background:rgba(46,213,115,0.1); padding:4px 10px; border-radius:20px; font-weight:600;">Active Threads: 0</span>
-        </div>
-
-        <div class="progress-wrap" id="crack-progress" style="margin-bottom:1.5rem;">
-          <div class="progress-bar"><div class="progress-fill" id="crack-fill" style="width:0%"></div></div>
-          <div style="display:flex; justify-content:space-between; margin-top:0.4rem; font-size:0.82rem; color:var(--text-muted);">
-            <span id="crack-progress-label">0.0% Complete</span>
-            <span id="crack-attempts-label">0 / 0 variations</span>
-          </div>
-        </div>
-
-        <!-- Stats Grid -->
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
-          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:1rem; border-radius:10px;">
-            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold; letter-spacing:0.5px;">Current Password Checked</span>
-            <div id="crack-current-pw" style="font-size:1.2rem; font-family:monospace; color:#fff; margin-top:0.3rem; word-break:break-all; min-height:1.8rem;">-</div>
-          </div>
-          <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); padding:1rem; border-radius:10px;">
-            <span style="font-size:0.75rem; color:var(--text-muted); text-transform:uppercase; font-weight:bold; letter-spacing:0.5px;">Recovered Password</span>
-            <div id="crack-recovered-pw" style="font-size:1.2rem; font-family:monospace; color:#2ed573; margin-top:0.3rem; word-break:break-all; font-weight:bold; min-height:1.8rem;">-</div>
-          </div>
-        </div>
-
-        <!-- Monospace Console Log -->
-        <label style="display:block; font-size:0.85rem; font-weight:bold; margin-bottom:0.5rem; color:var(--text-muted);">Detailed Cracking Log:</label>
-        <div id="crack-console-log" style="background:#0a0e17; border:1px solid rgba(255,255,255,0.08); font-family:monospace; font-size:0.8rem; color:#8890b0; padding:1rem; border-radius:8px; height:200px; overflow-y:auto; line-height:1.5; white-space:pre-wrap;">Console log will stream here...</div>
-      </div>
-
-      <div class="result-area" id="crack-result"></div>
-      
-      <p style="color:var(--text-muted); font-size:0.8rem; margin-top:1.5rem; text-align:center;">
-        Note: Ensure that the cracking script is running in your terminal: 
-        <code style="background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:4px; color:var(--accent2); font-family:monospace;">python "Pdf password tool.py"</code>
-      </p>
-    </div>
 
   </div><!-- end panels -->
 

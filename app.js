@@ -5,7 +5,6 @@ const state = {
   mergeFiles: [],
   splitFile: null, splitPages: 0,
   convertFile: null, convertPages: 0,
-  protectFile: null,
   formFile: null, formAnnotations: [], annotTool: 'text',
   formPdfBytes: null
 };
@@ -110,9 +109,7 @@ function dropFiles(e, tool) {
   if (tool === 'merge') addFiles('merge', files);
   else if (tool === 'split') loadSplitPDF(files[0]);
   else if (tool === 'convert') loadConvertPDF(files[0]);
-  else if (tool === 'protect') loadProtectPDF(files[0]);
   else if (tool === 'formfill') loadFormPDF(files[0]);
-  else if (tool === 'unlock') loadCrackPDF(files[0]);
 }
 
 // ===== HELPERS =====
@@ -131,10 +128,18 @@ function hideProgress(tool) { document.getElementById(tool + '-progress').style.
 function downloadBytes(bytes, filename) {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const blob = new Blob([arr], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+  const url = (window.URL || window.webkitURL).createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  // 10 seconds — enough time for even large merged PDFs to be picked up by the browser
+  setTimeout(() => {
+    (window.URL || window.webkitURL).revokeObjectURL(url);
+    a.remove();
+  }, 10000);
 }
 
 function makeResultItem(icon, label, onDownload, onPreview, extraInfo = '') {
@@ -382,94 +387,7 @@ async function convertToImages() {
   } catch(e) { showToast('Error: ' + e.message, 'error'); hideProgress('convert'); }
 }
 
-// ===== PROTECT =====
-async function loadProtectPDF(file) {
-  if (!file || !file.name.endsWith('.pdf')) { showToast('Please select a PDF file', 'error'); return; }
-  state.protectFile = file;
-  document.getElementById('protect-options').style.display = 'block';
-  document.getElementById('protect-info').textContent = `📄 ${file.name} — ${fmtSize(file.size)}`;
-  document.getElementById('protect-btn').disabled = false;
-  document.getElementById('protect-pw').addEventListener('input', updateStrength);
-  showToast(`Loaded: ${file.name}`, 'success');
-}
 
-function updateStrength() {
-  const pw = document.getElementById('protect-pw').value;
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  const bar = document.getElementById('protect-strength-bar');
-  const label = document.getElementById('protect-strength-label');
-  const colors = ['#ff4757','#ffa502','#eccc68','#2ed573'];
-  const labels = ['Weak','Fair','Good','Strong'];
-  bar.style.width = (score * 25) + '%';
-  bar.style.background = colors[score-1] || '#ff4757';
-  label.textContent = score > 0 ? labels[score-1] : '';
-  label.style.color = colors[score-1] || '#ff4757';
-}
-
-function togglePw(id) {
-  const inp = document.getElementById(id);
-  inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-async function protectPDF() {
-  if (!state.protectFile) return;
-  const pw = document.getElementById('protect-pw').value;
-  const pw2 = document.getElementById('protect-pw2').value;
-  if (!pw) { showToast('Please enter a password', 'error'); return; }
-  if (pw !== pw2) { showToast('Passwords do not match', 'error'); return; }
-  setProgress('protect', 15, 'Encrypting PDF via backend...');
-  try {
-    const formData = new FormData();
-    formData.append('pdf_file', state.protectFile);
-    formData.append('password', pw);
-    formData.append('perm_print', document.getElementById('perm-print').checked);
-    formData.append('perm_copy', document.getElementById('perm-copy').checked);
-    formData.append('perm_edit', document.getElementById('perm-edit').checked);
-
-    const resp = await fetch('http://localhost:5000/protect', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(errText || 'Failed to encrypt PDF');
-    }
-
-    const blob = await resp.blob();
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-
-    setProgress('protect', 100, 'Encrypted!');
-    const fname = state.protectFile.name.replace(/\.pdf$/i, '') + '_protected.pdf';
-    const result = document.getElementById('protect-result'); result.innerHTML = '';
-
-    // Password info card
-    const info = document.createElement('div');
-    info.style.cssText = 'background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:12px 16px;margin-bottom:0.8rem;font-size:0.875rem;';
-    info.innerHTML = `🔐 <strong>Encrypted successfully!</strong><br>
-      Password: <code style="background:rgba(255,255,255,0.08);padding:2px 8px;border-radius:4px;color:#00d4ff;">${pw}</code>
-      ${document.getElementById('perm-print').checked ? '&nbsp;·&nbsp;No Print' : ''}
-      ${document.getElementById('perm-copy').checked ? '&nbsp;·&nbsp;No Copy' : ''}
-      ${document.getElementById('perm-edit').checked ? '&nbsp;·&nbsp;No Edit' : ''}`;
-    result.appendChild(info);
-
-    const item = makeResultItem('🔐', fname,
-      (newName) => downloadBytes(bytes, newName),
-      () => showPDFPreview(bytes, fname)
-    );
-    result.appendChild(item);
-    showToast('PDF encrypted & ready!', 'success');
-    setTimeout(() => hideProgress('protect'), 1000);
-  } catch(e) {
-    showToast('Encryption error: ' + e.message, 'error');
-    console.error(e);
-    hideProgress('protect');
-  }
-}
 
 // ===== FORM FILL / ANNOTATE =====
 async function loadFormPDF(file) {
@@ -526,11 +444,12 @@ function handleAnnotClick(e, layer, pageNum) {
     el.addEventListener('focus', () => { if(el.textContent==='Type here...') el.textContent=''; });
     el.addEventListener('dblclick', (ev) => { ev.stopPropagation(); el.remove(); });
     layer.appendChild(el); el.focus();
-    state.formAnnotations.push({ type:'text', x, y, page:pageNum });
   } else if (state.annotTool === 'highlight') {
     const el = document.createElement('div');
+    el.className = 'annot-highlight';
     el.style.cssText = `position:absolute;left:${x-40}px;top:${y-10}px;width:120px;height:22px;
-      background:${color}55;border-radius:2px;pointer-events:none;`;
+      background:${color}55;border-radius:2px;cursor:pointer;`;
+    el.addEventListener('dblclick', (ev) => { ev.stopPropagation(); el.remove(); });
     layer.appendChild(el);
   } else if (state.annotTool === 'sign') {
     showSignaturePad(x, y, layer, color, size);
@@ -574,7 +493,9 @@ function applySig(x, y) {
   const layer = window._sigLayer;
   const img = document.createElement('img');
   img.src = dataUrl;
-  img.style.cssText = `position:absolute;left:${x-80}px;top:${y-40}px;width:160px;height:64px;object-fit:contain;pointer-events:none;`;
+  img.className = 'annot-signature';
+  img.style.cssText = `position:absolute;left:${x-80}px;top:${y-40}px;width:160px;height:64px;object-fit:contain;cursor:pointer;`;
+  img.addEventListener('dblclick', (ev) => { ev.stopPropagation(); img.remove(); });
   layer.appendChild(img);
   document.getElementById('sig-overlay').remove();
 }
@@ -597,24 +518,123 @@ async function downloadAnnotatedPDF() {
     const { PDFDocument, rgb, StandardFonts } = PDFLib;
     const doc = await PDFDocument.load(state.formPdfBytes);
     const font = await doc.embedFont(StandardFonts.Helvetica);
-    document.querySelectorAll('.annot-layer').forEach((layer, pi) => {
+    
+    const layers = document.querySelectorAll('.annot-layer');
+    for (let pi = 0; pi < layers.length; pi++) {
+      const layer = layers[pi];
       const page = doc.getPage(pi);
       const { height } = page.getSize();
-      layer.querySelectorAll('.annot-text').forEach(el => {
+      
+      const scaleX = page.getWidth() / layer.offsetWidth;
+      const scaleY = page.getHeight() / layer.offsetHeight;
+
+      // 1. Text annotations
+      const textEls = layer.querySelectorAll('.annot-text');
+      for (const el of textEls) {
         const txt = el.textContent.trim();
-        if (!txt || txt === 'Type here...') return;
+        if (!txt || txt === 'Type here...') continue;
+        
         const elRect = el.getBoundingClientRect();
         const layerRect = layer.getBoundingClientRect();
         const rx = elRect.left - layerRect.left;
         const ry = elRect.top - layerRect.top;
-        const scaleX = page.getWidth() / layer.offsetWidth;
-        const scaleY = page.getHeight() / layer.offsetHeight;
+        
+        const style = window.getComputedStyle(el);
+        const fSize = parseFloat(style.fontSize) || 16;
+        const padLeft = parseFloat(style.paddingLeft) || 8;
+        const padTop = parseFloat(style.paddingTop) || 4;
+        
+        let colorRgb = rgb(0.1, 0.3, 0.9);
+        const colorStr = style.color;
+        const rgbMatch = colorStr.match(/rgb\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/i);
+        if (rgbMatch) {
+          colorRgb = rgb(
+            parseInt(rgbMatch[1]) / 255,
+            parseInt(rgbMatch[2]) / 255,
+            parseInt(rgbMatch[3]) / 255
+          );
+        }
+        
+        const pdfX = (rx + padLeft) * scaleX;
+        const pdfY = height - ((ry + padTop) * scaleY) - (fSize * scaleY * 0.85);
+        
         page.drawText(txt, {
-          x: rx * scaleX, y: height - (ry * scaleY) - 14,
-          size: 12, font, color: rgb(0.1, 0.3, 0.9)
+          x: pdfX,
+          y: pdfY,
+          size: fSize * scaleY,
+          font,
+          color: colorRgb
         });
-      });
-    });
+      }
+
+      // 2. Highlight annotations
+      const highlightEls = layer.querySelectorAll('.annot-highlight');
+      for (const el of highlightEls) {
+        const elRect = el.getBoundingClientRect();
+        const layerRect = layer.getBoundingClientRect();
+        const rx = elRect.left - layerRect.left;
+        const ry = elRect.top - layerRect.top;
+        
+        const w = elRect.width * scaleX;
+        const h = elRect.height * scaleY;
+        const x = rx * scaleX;
+        const y = height - (ry * scaleY) - h;
+        
+        const style = window.getComputedStyle(el);
+        const bg = style.backgroundColor;
+        let colorRgb = rgb(1, 1, 0);
+        let opacity = 0.35;
+        
+        const rgbaMatch = bg.match(/rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/i);
+        if (rgbaMatch) {
+          colorRgb = rgb(
+            parseInt(rgbaMatch[1]) / 255,
+            parseInt(rgbaMatch[2]) / 255,
+            parseInt(rgbaMatch[3]) / 255
+          );
+          if (rgbaMatch[4] !== undefined) {
+            opacity = parseFloat(rgbaMatch[4]);
+          }
+        }
+        
+        page.drawRectangle({
+          x,
+          y,
+          width: w,
+          height: h,
+          color: colorRgb,
+          opacity: opacity
+        });
+      }
+
+      // 3. Signature annotations
+      const sigEls = layer.querySelectorAll('.annot-signature');
+      for (const imgEl of sigEls) {
+        const src = imgEl.src;
+        if (src.startsWith('data:image/png;base64,')) {
+          const base64Data = src.replace('data:image/png;base64,', '');
+          const pngImage = await doc.embedPng(base64Data);
+          
+          const elRect = imgEl.getBoundingClientRect();
+          const layerRect = layer.getBoundingClientRect();
+          const rx = elRect.left - layerRect.left;
+          const ry = elRect.top - layerRect.top;
+          
+          const w = elRect.width * scaleX;
+          const h = elRect.height * scaleY;
+          const x = rx * scaleX;
+          const y = height - (ry * scaleY) - h;
+          
+          page.drawImage(pngImage, {
+            x,
+            y,
+            width: w,
+            height: h
+          });
+        }
+      }
+    }
+    
     const bytes = await doc.save();
     const fname = state.formFile.name.replace('.pdf','') + '_annotated.pdf';
     const result = document.getElementById('formfill-result');
@@ -627,6 +647,7 @@ async function downloadAnnotatedPDF() {
     showToast('Annotated PDF ready!', 'success');
   } catch(e) {
     showToast('Error saving PDF: ' + e.message, 'error');
+    console.error(e);
   }
 }
 
@@ -645,215 +666,3 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-
-// ===== PDF PASSWORD CRACKER =====
-state.crackFile = null;
-
-function toggleGpuOpts() {
-  const isGpu = document.getElementById('crack-gpu').checked;
-  document.getElementById('gpu-opts-wrap').style.display = isGpu ? 'block' : 'none';
-}
-
-async function loadCrackPDF(file) {
-  if (!file) return;
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    showToast('Please select a PDF file', 'error'); return;
-  }
-  state.crackFile = file;
-  document.getElementById('crack-options').style.display = 'block';
-  document.getElementById('crack-btn').disabled = false;
-
-  const infoEl = document.getElementById('crack-info');
-  infoEl.textContent = 'Analyzing PDF file...';
-  infoEl.style.color = 'var(--text-muted)';
-
-  try {
-    const ab = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
-    // If it loads without error, it is not encrypted
-    infoEl.textContent = `PDF: ${file.name} — ${pdf.numPages} pages — ${fmtSize(file.size)} (Note: This PDF is NOT password protected!)`;
-    infoEl.style.color = '#ff6b6b';
-  } catch (err) {
-    if (err.name === 'PasswordException') {
-      infoEl.textContent = `PDF: ${file.name} — ${fmtSize(file.size)} — Password protection detected`;
-      infoEl.style.color = '#2ed573';
-    } else {
-      infoEl.textContent = `PDF: ${file.name} — ${fmtSize(file.size)}`;
-      infoEl.style.color = 'var(--text-muted)';
-    }
-  }
-  showToast(`Loaded: ${file.name}`, 'success');
-}
-
-let isCrackingPolling = false;
-
-async function startCracking() {
-  if (!state.crackFile) return;
-
-  const wordlist = document.getElementById('crack-wordlist').checked ? 'on' : 'off';
-  const patterns = document.getElementById('crack-patterns').checked ? 'on' : 'off';
-  const rules = document.getElementById('crack-rules').checked ? 'on' : 'off';
-  const gpu = document.getElementById('crack-gpu').checked ? 'on' : 'off';
-  const hashcatOpts = document.getElementById('crack-hashcat-opts').value.trim() || '-m 10500';
-
-  const formData = new FormData();
-  formData.append('pdf_file', state.crackFile, state.crackFile.name);
-  formData.append('use_wordlist', wordlist);
-  formData.append('use_patterns', patterns);
-  formData.append('use_rules', rules);
-  formData.append('use_gpu', gpu);
-  formData.append('hashcat_opts', hashcatOpts);
-
-  document.getElementById('crack-status-text').textContent = 'Uploading...';
-  document.getElementById('crack-status-text').style.color = 'var(--accent2)';
-  document.getElementById('crack-spinner').style.display = 'inline-block';
-  document.getElementById('crack-recovered-pw').textContent = '-';
-  document.getElementById('crack-recovered-pw').style.color = '#fff';
-  document.getElementById('crack-current-pw').textContent = '-';
-  document.getElementById('crack-console-log').textContent = 'Uploading PDF and starting threads...';
-  document.getElementById('crack-status-wrap').style.display = 'block';
-  document.getElementById('crack-result').innerHTML = '';
-  document.getElementById('crack-btn').disabled = true;
-
-  try {
-    const resp = await fetch('http://localhost:5000/', {
-      method: 'POST',
-      body: formData
-    });
-    if (!resp.ok) {
-      throw new Error('Server returned an error');
-    }
-    // Start polling status
-    isCrackingPolling = true;
-    setTimeout(pollCrackStatus, 500);
-  } catch (err) {
-    showToast('Failed to connect to cracking tool server', 'error');
-    document.getElementById('crack-status-text').textContent = 'Connection Error';
-    document.getElementById('crack-status-text').style.color = '#ff4757';
-    document.getElementById('crack-spinner').style.display = 'none';
-    document.getElementById('crack-console-log').textContent = `Error connecting to http://localhost:5000/\nMake sure the python tool is running (run 'python "Pdf password tool.py"' in your terminal).`;
-    document.getElementById('crack-btn').disabled = false;
-  }
-}
-
-async function pollCrackStatus() {
-  if (!isCrackingPolling) return;
-
-  try {
-    const resp = await fetch('http://localhost:5000/status-json');
-    if (!resp.ok) throw new Error('Status poll failed');
-    const data = await resp.json();
-
-    const status = data.status;
-    const attempts = data.attempts || 0;
-    const totalWords = data.total_words || 0;
-    const percentage = data.percentage || 0;
-    const threadsActive = data.threads_active || 0;
-    const currentPw = data.current_password || '-';
-    const recoveredPw = data.password || '';
-    const logLines = data.log || [];
-
-    // Update status text
-    const statusTextEl = document.getElementById('crack-status-text');
-    if (status === 'cracking') {
-      statusTextEl.textContent = 'Cracking...';
-      statusTextEl.style.color = 'var(--accent2)';
-    } else if (status === 'done') {
-      statusTextEl.textContent = 'Done!';
-      statusTextEl.style.color = '#2ed573';
-    } else if (status === 'not_found') {
-      statusTextEl.textContent = 'Not Found';
-      statusTextEl.style.color = '#ff9f43';
-    } else if (status === 'error') {
-      statusTextEl.textContent = 'Error';
-      statusTextEl.style.color = '#ff4757';
-    }
-
-    // Update thread count and progress
-    document.getElementById('crack-threads-count').textContent = `Active Threads: ${threadsActive}`;
-    document.getElementById('crack-fill').style.width = `${percentage}%`;
-    document.getElementById('crack-progress-label').textContent = `${percentage}% Complete`;
-    document.getElementById('crack-attempts-label').textContent = `${attempts.toLocaleString()} / ${totalWords.toLocaleString()} variations`;
-    document.getElementById('crack-current-pw').textContent = currentPw;
-
-    // Log window update
-    const logBox = document.getElementById('crack-console-log');
-    logBox.textContent = logLines.join('\n');
-    logBox.scrollTop = logBox.scrollHeight;
-
-    if (status === 'cracking') {
-      setTimeout(pollCrackStatus, 400);
-    } else {
-      isCrackingPolling = false;
-      document.getElementById('crack-spinner').style.display = 'none';
-      document.getElementById('crack-btn').disabled = false;
-
-      const resultArea = document.getElementById('crack-result');
-      resultArea.innerHTML = '';
-
-      if (status === 'done') {
-        document.getElementById('crack-recovered-pw').textContent = recoveredPw;
-        document.getElementById('crack-recovered-pw').style.color = '#2ed573';
-        showToast('Password recovered successfully!', 'success');
-
-        // Create success card
-        const card = document.createElement('div');
-        card.style.cssText = 'background:rgba(46,213,115,0.06); border:1px solid rgba(46,213,115,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
-        card.innerHTML = `
-          <strong style="color:#2ed573; font-size:1.05rem;">🎉 Success! Password Found</strong><br>
-          The recovered password is: <code style="background:rgba(255,255,255,0.08); padding:3px 10px; border-radius:4px; color:#2ed573; font-weight:bold; font-size:1.1rem; letter-spacing:0.5px;">${recoveredPw}</code><br>
-          <span style="color:var(--text-muted); font-size:0.85rem;">You can now download the fully decrypted PDF below.</span>
-        `;
-        resultArea.appendChild(card);
-
-        // Add result actions (Download & Preview)
-        const fname = state.crackFile.name.replace(/\.pdf$/i, '') + '_decrypted.pdf';
-        const actionItem = makeResultItem('📄', fname,
-          async (newName) => {
-            try {
-              showToast('Downloading decrypted PDF...', 'info');
-              const resp = await fetch('http://localhost:5000/download');
-              const buffer = await resp.arrayBuffer();
-              downloadBytes(new Uint8Array(buffer), newName);
-            } catch (err) {
-              showToast('Download failed: ' + err.message, 'error');
-            }
-          },
-          async () => {
-            try {
-              const previewResp = await fetch('http://localhost:5000/download');
-              const buffer = await previewResp.arrayBuffer();
-              showPDFPreview(new Uint8Array(buffer), fname);
-            } catch (err) {
-              showToast('Failed to load preview: ' + err.message, 'error');
-            }
-          }
-        );
-        resultArea.appendChild(actionItem);
-
-      } else if (status === 'not_found') {
-        showToast('Password not found in dictionary/patterns', 'warning');
-        const card = document.createElement('div');
-        card.style.cssText = 'background:rgba(255,159,67,0.06); border:1px solid rgba(255,159,67,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
-        card.innerHTML = `
-          <strong style="color:#ff9f43; font-size:1.05rem;">🔍 Password Not Found</strong><br>
-          <span style="color:var(--text-muted); font-size:0.85rem;">All variations and wordlist entries have been exhausted. Try enabling rules or using a larger wordlist (like rockyou.txt).</span>
-        `;
-        resultArea.appendChild(card);
-      } else if (status === 'error') {
-        showToast('Cracking job failed', 'error');
-        const card = document.createElement('div');
-        card.style.cssText = 'background:rgba(255,71,87,0.06); border:1px solid rgba(255,71,87,0.2); border-radius:12px; padding:1.2rem; margin-top:1.5rem; line-height:1.7;';
-        card.innerHTML = `
-          <strong style="color:#ff4757; font-size:1.05rem;">❌ Cracking Error</strong><br>
-          <span style="color:var(--text-muted); font-size:0.85rem;">An error occurred during execution. Check the logs above for more details.</span>
-        `;
-        resultArea.appendChild(card);
-      }
-    }
-  } catch (err) {
-    console.error('Polling error', err);
-    // don't stop polling on momentary network drop, but wait longer
-    setTimeout(pollCrackStatus, 1000);
-  }
-}

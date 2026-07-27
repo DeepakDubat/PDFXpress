@@ -136,7 +136,6 @@ a { color: inherit; text-decoration: none; }
 .c1 { top: 20%; left: 5%; animation-delay: 0s; }
 .c2 { top: 35%; right: 6%; animation-delay: 1s; }
 .c3 { bottom: 35%; left: 8%; animation-delay: 2s; }
-.c4 { bottom: 25%; right: 10%; animation-delay: 0.5s; }
 .c5 { top: 55%; left: 3%; animation-delay: 1.5s; }
 @keyframes float {
   0%, 100% { transform: translateY(0); }
@@ -502,35 +501,3 @@ a { color: inherit; text-decoration: none; }
   .tool-btn { padding: 6px 10px; font-size: 0.78rem; }
 }
 
-/* ===== FLOATING CARD C6 ===== */
-.c6 { top: 22%; right: 3%; animation-delay: 2.5s; }
-
-/* ===== UNLOCK CARD (cyan theme) ===== */
-.unlock-card::before {
-  background: linear-gradient(135deg, rgba(0,212,255,0.12), transparent) !important;
-}
-.unlock-card:hover {
-  border-color: rgba(0,212,255,0.45) !important;
-  box-shadow: 0 12px 40px rgba(0,212,255,0.18) !important;
-}
-
-/* ===== CRACKER DROP ZONE (cyan tint) ===== */
-#crack-drop {
-  border-color: rgba(0,212,255,0.25);
-  background: rgba(0,212,255,0.02);
-}
-#crack-drop:hover, #crack-drop.drag-over {
-  border-color: var(--accent2);
-  background: rgba(0,212,255,0.07);
-}
-
-/* ===== SPINNER ===== */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-#crack-spinner {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}

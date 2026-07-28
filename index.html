@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PDFXpress – Your Complete PDF Toolkit</title>
-  <meta name="description" content="Free online PDF tools: Merge, Split, Convert to Image, Password Protect, Remove Password, and Form Fill PDFs instantly in your browser." />
+  <meta name="description" content="Free online PDF tools: Merge, Split, Convert to Image, Word to PDF, PDF to Word, Image to PDF, Password Protect, Remove Password, and Form Fill PDFs instantly in your browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -40,6 +40,8 @@
       <div class="floating-card c2">✂️ Split PDF</div>
       <div class="floating-card c3">🖼️ PDF → Image</div>
       <div class="floating-card c5">📝 Form Fill</div>
+      <div class="floating-card c6">📄 Word → PDF</div>
+      <div class="floating-card c7">🖼️ Image → PDF</div>
     </div>
   </section>
 
@@ -74,6 +76,24 @@
           <h3>Form Filler</h3>
           <p>Fill and annotate PDF forms interactively</p>
           <span class="tool-tag">Form</span>
+        </div>
+        <div class="tool-card" onclick="openTool('word2pdf')" id="card-word2pdf">
+          <div class="tool-icon">📄</div>
+          <h3>Word → PDF</h3>
+          <p>Convert DOCX Word documents to PDF instantly</p>
+          <span class="tool-tag new-tag">New</span>
+        </div>
+        <div class="tool-card" onclick="openTool('pdf2word')" id="card-pdf2word">
+          <div class="tool-icon">📝</div>
+          <h3>PDF → Word</h3>
+          <p>Extract text from PDF into an editable Word document</p>
+          <span class="tool-tag new-tag">New</span>
+        </div>
+        <div class="tool-card" onclick="openTool('img2pdf')" id="card-img2pdf">
+          <div class="tool-icon">🖼️</div>
+          <h3>Image → PDF</h3>
+          <p>Combine JPG, PNG, WebP images into a single PDF</p>
+          <span class="tool-tag new-tag">New</span>
         </div>
       </div>
     </div>
@@ -213,6 +233,88 @@
     </div>
 
 
+    <!-- WORD TO PDF -->
+    <div class="panel" id="panel-word2pdf">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>📄 Word → PDF</h2>
+        <p>Upload a DOCX file and convert it to a PDF document</p>
+      </div>
+      <div class="drop-zone" id="word2pdf-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'word2pdf')" onclick="document.getElementById('word2pdf-input').click()">
+        <div class="drop-icon">📄</div>
+        <div class="drop-text">Drag &amp; Drop a DOCX file here or <span class="link">Browse File</span></div>
+        <div class="drop-hint">Supports .docx files only</div>
+        <input type="file" id="word2pdf-input" accept=".docx" style="display:none" onchange="loadWord2PDF(this.files[0])" />
+      </div>
+      <div class="pdf-info" id="word2pdf-info" style="display:none;"></div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="convertWord2PDF()" id="word2pdf-btn" disabled>⚡ Convert to PDF</button>
+      </div>
+      <div class="progress-wrap" id="word2pdf-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="word2pdf-fill"></div></div>
+        <div class="progress-label" id="word2pdf-label">Converting...</div>
+      </div>
+      <div class="result-area" id="word2pdf-result"></div>
+    </div>
+
+    <!-- PDF TO WORD -->
+    <div class="panel" id="panel-pdf2word">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>📝 PDF → Word</h2>
+        <p>Extract text content from a PDF into an editable DOCX file</p>
+      </div>
+      <div class="drop-zone" id="pdf2word-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'pdf2word')" onclick="document.getElementById('pdf2word-input').click()">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drag &amp; Drop a PDF here or <span class="link">Browse File</span></div>
+        <div class="drop-hint">Supports .pdf files only</div>
+        <input type="file" id="pdf2word-input" accept=".pdf" style="display:none" onchange="loadPDF2Word(this.files[0])" />
+      </div>
+      <div class="pdf-info" id="pdf2word-info" style="display:none;"></div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="convertPDF2Word()" id="pdf2word-btn" disabled>⚡ Convert to Word</button>
+      </div>
+      <div class="progress-wrap" id="pdf2word-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="pdf2word-fill"></div></div>
+        <div class="progress-label" id="pdf2word-label">Extracting text...</div>
+      </div>
+      <div class="result-area" id="pdf2word-result"></div>
+    </div>
+
+    <!-- IMAGE TO PDF -->
+    <div class="panel" id="panel-img2pdf">
+      <div class="panel-header">
+        <button class="back-btn" onclick="closeTool()">← Back</button>
+        <h2>🖼️ Image → PDF</h2>
+        <p>Upload multiple images and combine them into a single PDF</p>
+      </div>
+      <div class="drop-zone" id="img2pdf-drop" ondragover="dragOver(event)" ondrop="dropFiles(event,'img2pdf')" onclick="document.getElementById('img2pdf-input').click()">
+        <div class="drop-icon">🖼️</div>
+        <div class="drop-text">Drag &amp; Drop images here or <span class="link">Browse Files</span></div>
+        <div class="drop-hint">Supports JPG, PNG, WebP, GIF • Multiple files allowed</div>
+        <input type="file" id="img2pdf-input" multiple accept="image/*" style="display:none" onchange="addImageFiles(this.files)" />
+      </div>
+      <div class="file-list" id="img2pdf-list"></div>
+      <div id="img2pdf-options" style="display:none;">
+        <div class="option-group">
+          <label class="option-label">Page Size:</label>
+          <div class="radio-group">
+            <label><input type="radio" name="img2pdf-size" value="fit" checked /> Fit Image (original size)</label>
+            <label><input type="radio" name="img2pdf-size" value="a4" /> A4 Page</label>
+            <label><input type="radio" name="img2pdf-size" value="letter" /> Letter Page</label>
+          </div>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-action" onclick="convertImg2PDF()" id="img2pdf-btn" disabled>⚡ Create PDF</button>
+      </div>
+      <div class="progress-wrap" id="img2pdf-progress" style="display:none">
+        <div class="progress-bar"><div class="progress-fill" id="img2pdf-fill"></div></div>
+        <div class="progress-label" id="img2pdf-label">Processing images...</div>
+      </div>
+      <div class="result-area" id="img2pdf-result"></div>
+    </div>
+
   </div><!-- end panels -->
 
   <!-- HOW IT WORKS -->
@@ -280,6 +382,10 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- Word/DOCX conversion -->
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

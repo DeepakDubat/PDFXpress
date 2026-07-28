@@ -6,7 +6,10 @@ const state = {
   splitFile: null, splitPages: 0,
   convertFile: null, convertPages: 0,
   formFile: null, formAnnotations: [], annotTool: 'text',
-  formPdfBytes: null
+  formPdfBytes: null,
+  word2pdfFile: null,
+  pdf2wordFile: null,
+  img2pdfFiles: []
 };
 
 // ===== PREVIEW MODAL =====
@@ -110,6 +113,9 @@ function dropFiles(e, tool) {
   else if (tool === 'split') loadSplitPDF(files[0]);
   else if (tool === 'convert') loadConvertPDF(files[0]);
   else if (tool === 'formfill') loadFormPDF(files[0]);
+  else if (tool === 'word2pdf') loadWord2PDF(files[0]);
+  else if (tool === 'pdf2word') loadPDF2Word(files[0]);
+  else if (tool === 'img2pdf') addImageFiles(files);
 }
 
 // ===== HELPERS =====
@@ -666,3 +672,395 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+
+// ===== WORD → PDF =====
+async function loadWord2PDF(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext !== 'docx') { showToast('Please select a .docx file', 'error'); return; }
+  state.word2pdfFile = file;
+  const info = document.getElementById('word2pdf-info');
+  info.style.display = 'block';
+  info.textContent = `📄 ${file.name} — ${fmtSize(file.size)}`;
+  document.getElementById('word2pdf-btn').disabled = false;
+  showToast(`Loaded: ${file.name}`, 'success');
+}
+
+async function convertWord2PDF() {
+  if (!state.word2pdfFile) return;
+  setProgress('word2pdf', 10, 'Reading Word document...');
+  try {
+    const ab = await state.word2pdfFile.arrayBuffer();
+    setProgress('word2pdf', 30, 'Converting to HTML...');
+
+    // mammoth: DOCX → HTML
+    const result = await mammoth.convertToHtml({ arrayBuffer: ab });
+    const htmlContent = result.value;
+
+    setProgress('word2pdf', 50, 'Rendering pages...');
+
+    // Create a hidden iframe to render the HTML at a fixed width
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1123px;border:none;background:#fff;';
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentDocument;
+    idoc.open();
+    idoc.write(`<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <style>
+        body{font-family:Arial,sans-serif;font-size:12pt;padding:40px 60px;color:#000;background:#fff;margin:0;}
+        h1,h2,h3,h4{margin:16px 0 8px;}
+        p{margin:0 0 10px;line-height:1.6;}
+        table{border-collapse:collapse;width:100%;margin-bottom:12px;}
+        td,th{border:1px solid #ccc;padding:6px 10px;}
+        ul,ol{padding-left:20px;margin-bottom:10px;}
+        img{max-width:100%;}
+      </style>
+    </head><body>${htmlContent}</body></html>`);
+    idoc.close();
+
+    // Wait for render
+    await new Promise(r => setTimeout(r, 500));
+
+    setProgress('word2pdf', 65, 'Building PDF...');
+
+    // We render the iframe body to canvas page by page using scrolling
+    const { PDFDocument } = PDFLib;
+    const pdfDoc = await PDFDocument.create();
+
+    const pageW = 794;
+    const pageH = 1123;
+    const totalH = iframe.contentDocument.body.scrollHeight;
+    const numPages = Math.ceil(totalH / pageH);
+
+    for (let pg = 0; pg < numPages; pg++) {
+      setProgress('word2pdf', 65 + Math.floor((pg / numPages) * 25), `Rendering page ${pg + 1}/${numPages}...`);
+      const canvas = document.createElement('canvas');
+      canvas.width = pageW * 2; canvas.height = pageH * 2;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Render the visible slice of the iframe body
+      const offsetY = pg * pageH;
+      const slice = idoc.body;
+
+      // Use html2canvas if available, else fallback
+      let dataUrl;
+      try {
+        const hCanvas = await html2canvas(slice, {
+          canvas,
+          scale: 2,
+          useCORS: true,
+          scrollX: 0,
+          scrollY: -offsetY,
+          windowWidth: pageW,
+          windowHeight: pageH,
+          backgroundColor: '#ffffff'
+        });
+        dataUrl = hCanvas.toDataURL('image/jpeg', 0.92);
+      } catch (_) {
+        // Fallback: white page with note
+        ctx.fillStyle = '#333';
+        ctx.font = '24px Arial';
+        ctx.fillText(`Page ${pg + 1}`, 40, 60);
+        dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+      }
+
+      const imgBytes = dataUrlToBytes(dataUrl);
+      const img = await pdfDoc.embedJpg(imgBytes);
+      const page = pdfDoc.addPage([pageW, pageH]);
+      page.drawImage(img, { x: 0, y: 0, width: pageW, height: pageH });
+    }
+
+    iframe.remove();
+    setProgress('word2pdf', 95, 'Finalizing...');
+    const bytes = await pdfDoc.save();
+    setProgress('word2pdf', 100, 'Done!');
+
+    const fname = state.word2pdfFile.name.replace(/\.docx$/i, '') + '.pdf';
+    const result2 = document.getElementById('word2pdf-result');
+    result2.innerHTML = '';
+    const item = makeResultItem('✅', fname,
+      (newName) => downloadBytes(bytes, newName),
+      () => showPDFPreview(bytes, fname),
+      `Converted from: ${state.word2pdfFile.name}`
+    );
+    result2.appendChild(item);
+    showToast('Word converted to PDF!', 'success');
+    setTimeout(() => hideProgress('word2pdf'), 1000);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    hideProgress('word2pdf');
+    console.error(e);
+  }
+}
+
+// ===== PDF → WORD =====
+async function loadPDF2Word(file) {
+  if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Please select a PDF file', 'error'); return;
+  }
+  state.pdf2wordFile = file;
+  const info = document.getElementById('pdf2word-info');
+  info.style.display = 'block';
+  info.textContent = `📄 ${file.name} — ${fmtSize(file.size)}`;
+  document.getElementById('pdf2word-btn').disabled = false;
+  showToast(`Loaded: ${file.name}`, 'success');
+}
+
+async function convertPDF2Word() {
+  if (!state.pdf2wordFile) return;
+  setProgress('pdf2word', 10, 'Loading PDF...');
+  try {
+    const ab = await state.pdf2wordFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const numPages = pdf.numPages;
+
+    setProgress('pdf2word', 20, 'Extracting text...');
+    let allText = '';
+    const pageTexts = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      setProgress('pdf2word', 20 + Math.floor((i / numPages) * 60), `Processing page ${i}/${numPages}...`);
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(item => item.str).join(' ');
+      pageTexts.push(pageText);
+      allText += pageText + '\n\n';
+    }
+
+    setProgress('pdf2word', 85, 'Building Word document...');
+
+    // Use docx.js to create a proper DOCX
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+    const children = [];
+
+    // Title
+    children.push(new Paragraph({
+      text: state.pdf2wordFile.name.replace(/\.pdf$/i, ''),
+      heading: HeadingLevel.HEADING_1
+    }));
+
+    pageTexts.forEach((text, idx) => {
+      children.push(new Paragraph({
+        children: [new TextRun({ text: `— Page ${idx + 1} —`, bold: true, color: '888888', size: 18 })]
+      }));
+      // Split by sentences/paragraphs
+      const paras = text.split(/(?<=\.\s)|\n+/).filter(p => p.trim().length > 0);
+      paras.forEach(para => {
+        children.push(new Paragraph({
+          children: [new TextRun({ text: para.trim(), size: 24 })]
+        }));
+      });
+      children.push(new Paragraph({ text: '' }));
+    });
+
+    const doc = new Document({
+      sections: [{ properties: {}, children }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const arrayBuf = await blob.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuf);
+
+    setProgress('pdf2word', 100, 'Done!');
+
+    const fname = state.pdf2wordFile.name.replace(/\.pdf$/i, '') + '.docx';
+    const resultEl = document.getElementById('pdf2word-result');
+    resultEl.innerHTML = '';
+
+    // Custom download for DOCX (not PDF)
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    div.style.cssText = 'display:flex;align-items:center;gap:12px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:12px 16px;margin-top:0.8rem;';
+    div.innerHTML = `
+      <span style="font-size:1.5rem;">📝</span>
+      <div style="flex:1;min-width:0;">
+        <input type="text" class="ri-name-input" value="${fname}" style="background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.3);color:#fff;font-family:inherit;font-size:0.92rem;padding:2px 4px;outline:none;width:100%;box-sizing:border-box;"/>
+        <span style="font-size:0.75rem;color:var(--text-muted);padding-left:4px;">Converted from: ${state.pdf2wordFile.name} (${numPages} pages)</span>
+      </div>
+      <button id="docx-dl-btn" style="background:rgba(0,212,255,0.15);border:1px solid rgba(0,212,255,0.3);color:#00d4ff;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;transition:all 0.2s;">⬇ Download DOCX</button>`;
+    div.querySelector('#docx-dl-btn').onclick = () => {
+      let name = div.querySelector('.ri-name-input').value.trim() || fname;
+      if (!name.toLowerCase().endsWith('.docx')) name += '.docx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    };
+    resultEl.appendChild(div);
+    showToast('PDF converted to Word!', 'success');
+    setTimeout(() => hideProgress('pdf2word'), 1000);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    hideProgress('pdf2word');
+    console.error(e);
+  }
+}
+
+// ===== IMAGE → PDF =====
+function addImageFiles(filesInput) {
+  const files = filesInput instanceof FileList ? [...filesInput] : filesInput;
+  const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp'];
+  files.forEach(f => {
+    if (!allowed.includes(f.type)) { showToast(`Skipped: ${f.name} (not an image)`, 'error'); return; }
+    state.img2pdfFiles.push(f);
+  });
+  renderImg2PDFList();
+}
+
+function renderImg2PDFList() {
+  const list = document.getElementById('img2pdf-list');
+  list.innerHTML = '';
+  state.img2pdfFiles.forEach((f, i) => {
+    const div = document.createElement('div'); div.className = 'file-item';
+    // Show a tiny thumbnail
+    const url = URL.createObjectURL(f);
+    div.innerHTML = `
+      <img src="${url}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;border:1px solid var(--glass-border);" />
+      <span class="fi-name">${f.name}</span>
+      <span class="fi-size">${fmtSize(f.size)}</span>
+      <button class="fi-remove" onclick="removeImg2PDFFile(${i})">✕</button>`;
+    list.appendChild(div);
+  });
+  const hasFiles = state.img2pdfFiles.length > 0;
+  document.getElementById('img2pdf-btn').disabled = !hasFiles;
+  document.getElementById('img2pdf-options').style.display = hasFiles ? 'block' : 'none';
+}
+
+function removeImg2PDFFile(i) {
+  state.img2pdfFiles.splice(i, 1);
+  renderImg2PDFList();
+}
+
+async function convertImg2PDF() {
+  if (state.img2pdfFiles.length === 0) return;
+  const pageSize = document.querySelector('input[name="img2pdf-size"]:checked').value;
+  setProgress('img2pdf', 5, 'Initializing...');
+  try {
+    const { PDFDocument } = PDFLib;
+    const pdfDoc = await PDFDocument.create();
+
+    // Standard page dimensions (points = 1/72 inch)
+    const PAGE_SIZES = {
+      a4:     [595.28, 841.89],
+      letter: [612,    792]
+    };
+
+    for (let i = 0; i < state.img2pdfFiles.length; i++) {
+      setProgress('img2pdf', 5 + Math.floor((i / state.img2pdfFiles.length) * 90),
+        `Embedding image ${i + 1}/${state.img2pdfFiles.length}...`);
+
+      const file = state.img2pdfFiles[i];
+      const ab = await file.arrayBuffer();
+      const bytes = new Uint8Array(ab);
+
+      // Determine image type and embed
+      let img;
+      const mime = file.type.toLowerCase();
+      try {
+        if (mime === 'image/png') {
+          img = await pdfDoc.embedPng(bytes);
+        } else {
+          // For jpg, webp, gif, bmp — convert via canvas to jpeg first
+          const dataUrl = await fileToDataUrl(file);
+          const jpegBytes = await dataUrlToJpeg(dataUrl);
+          img = await pdfDoc.embedJpg(jpegBytes);
+        }
+      } catch(_) {
+        // Fallback: convert everything through canvas
+        const dataUrl = await fileToDataUrl(file);
+        const jpegBytes = await dataUrlToJpeg(dataUrl);
+        img = await pdfDoc.embedJpg(jpegBytes);
+      }
+
+      const { width: iw, height: ih } = img;
+
+      let pageW, pageH;
+      if (pageSize === 'fit') {
+        pageW = iw; pageH = ih;
+      } else {
+        [pageW, pageH] = PAGE_SIZES[pageSize];
+      }
+
+      const page = pdfDoc.addPage([pageW, pageH]);
+
+      // Scale image to fit inside the page with padding
+      const padding = pageSize === 'fit' ? 0 : 20;
+      const maxW = pageW - padding * 2;
+      const maxH = pageH - padding * 2;
+      const scale = Math.min(maxW / iw, maxH / ih, 1);
+      const drawW = iw * scale;
+      const drawH = ih * scale;
+      const x = (pageW - drawW) / 2;
+      const y = (pageH - drawH) / 2;
+
+      page.drawImage(img, { x, y, width: drawW, height: drawH });
+    }
+
+    setProgress('img2pdf', 97, 'Finalizing...');
+    const bytes = await pdfDoc.save();
+    setProgress('img2pdf', 100, 'Done!');
+
+    const fname = 'images_combined.pdf';
+    const resultEl = document.getElementById('img2pdf-result');
+    resultEl.innerHTML = '';
+    const item = makeResultItem('🖼️', fname,
+      (newName) => downloadBytes(bytes, newName),
+      () => showPDFPreview(bytes, fname),
+      `${state.img2pdfFiles.length} image(s) combined`
+    );
+    resultEl.appendChild(item);
+    showToast('Images converted to PDF!', 'success');
+    setTimeout(() => hideProgress('img2pdf'), 1000);
+  } catch(e) {
+    showToast('Error: ' + e.message, 'error');
+    hideProgress('img2pdf');
+    console.error(e);
+  }
+}
+
+// Helper: File to data URL
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Helper: data URL → JPEG bytes via canvas
+function dataUrlToJpeg(dataUrl, quality = 0.92) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('Canvas toBlob failed')); return; }
+        blob.arrayBuffer().then(ab => resolve(new Uint8Array(ab))).catch(reject);
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+// Helper: data URL (base64) → Uint8Array (no fetch needed, works on file://)
+function dataUrlToBytes(dataUrl) {
+  const base64 = dataUrl.split(',')[1];
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}

@@ -137,6 +137,8 @@ a { color: inherit; text-decoration: none; }
 .c2 { top: 35%; right: 6%; animation-delay: 1s; }
 .c3 { bottom: 35%; left: 8%; animation-delay: 2s; }
 .c5 { top: 55%; left: 3%; animation-delay: 1.5s; }
+.c6 { top: 15%; right: 8%; animation-delay: 0.5s; }
+.c7 { bottom: 25%; right: 5%; animation-delay: 2.5s; }
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-14px); }
@@ -183,6 +185,16 @@ a { color: inherit; text-decoration: none; }
   font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
   background: rgba(124,92,252,0.15); color: var(--accent2);
   padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(0,212,255,0.2);
+}
+.new-tag {
+  background: rgba(0,212,120,0.15);
+  color: #00d478;
+  border-color: rgba(0,212,120,0.3);
+  animation: newPulse 2s ease-in-out infinite;
+}
+@keyframes newPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,212,120,0); }
+  50% { box-shadow: 0 0 0 4px rgba(0,212,120,0.15); }
 }
 
 /* ===== TOOL PANELS ===== */
